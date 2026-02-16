@@ -67,6 +67,59 @@ class StudentMonitoringService {
 
   constructor() {
     this.startMonitoring();
+    // Seed demo students when running on localhost for development/demo purposes
+    try {
+      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+      if ((hostname === 'localhost' || hostname === '127.0.0.1') && this.students.size === 0) {
+        this.seedDemoStudents();
+      }
+    } catch (err) {
+      // ignore in non-browser environments
+    }
+  }
+
+  private seedDemoStudents() {
+    // Create three demo students with varying states
+    const id1 = this.addStudent('ENR001', 'Aarav Sharma', 'demo');
+    const id2 = this.addStudent('ENR002', 'Priya Kapoor', 'demo');
+    const id3 = this.addStudent('ENR003', 'Rohit Patel', 'demo');
+
+    // Update statuses to show different dashboard panels
+    this.updateStudentStatus(id1, {
+      isCameraOn: true,
+      isMicOn: true,
+      isInExam: true,
+      examStartTime: new Date(Date.now() - 5 * 60 * 1000), // started 5 minutes ago
+      currentExam: {
+        examId: 'demo_exam_1',
+        examDate: new Date(),
+        examDuration: 0,
+        totalQuestions: 20,
+        questionsAttempted: 3,
+        questionsAnswered: 3,
+        questionsSkipped: 0,
+        score: null,
+        status: 'in_progress',
+        categories: []
+      },
+      connectionQuality: 'good'
+    });
+
+    this.updateStudentStatus(id2, {
+      isCameraOn: false,
+      isMicOn: true,
+      isInExam: false,
+      connectionQuality: 'excellent'
+    });
+
+    this.updateStudentStatus(id3, {
+      isCameraOn: true,
+      isMicOn: false,
+      isInExam: false,
+      connectionQuality: 'poor'
+    });
+
+    this.notifyStatusUpdate();
   }
 
   public startMonitoring() {

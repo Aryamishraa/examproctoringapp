@@ -31,7 +31,10 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBackToStudent }) => 
     }
 
     // Simple admin authentication (in production, this would be server-side)
-    if (formData.username === 'admin' && formData.password === 'admin123456') {
+    const username = formData.username.trim().toLowerCase();
+    const password = formData.password.trim();
+
+    if (username === 'admin' && password === 'admin123456') {
       onLogin({
         enrollmentNo: 'admin',
         name: 'Administrator',
