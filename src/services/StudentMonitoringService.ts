@@ -54,10 +54,21 @@ export interface CategoryPerformance {
   score: number;
 }
 
+export interface StudentSnapshot {
+  id: string;
+  studentId: string;
+  timestamp: Date;
+  imageData: string; // Base64 encoded image
+  studentName: string;
+  enrollmentNo: string;
+}
+
 class StudentMonitoringService {
   private students: Map<string, StudentStatus> = new Map();
+  private snapshots: Map<string, StudentSnapshot[]> = new Map();
   private activityCallbacks: ((activity: StudentActivity) => void)[] = [];
   private statusCallbacks: ((status: StudentStatus[]) => void)[] = [];
+  private snapshotCallbacks: ((snapshots: StudentSnapshot[]) => void)[] = [];
   private monitoringInterval: NodeJS.Timeout | null = null;
   private tabVisibilityHandler: (() => void) | null = null;
   private audioContext: AudioContext | null = null;
@@ -444,6 +455,19 @@ class StudentMonitoringService {
     if (student) {
       student.warnings += 1;
       this.recordActivity(studentId, 'warning_received', 'Warning sent by admin', 'medium');
+      
+      // Auto-disconnect on 3 warnings
+      if (student.warnings >= 3) {
+        this.recordActivity(studentId, 'disconnected', 'Student disconnected due to 3 warnings', 'high');
+        student.isOnline = false;
+        student.isCameraOn = false;
+        student.isMicOn = false;
+        student.isTabActive = false;
+        student.connectionQuality = 'disconnected';
+        student.isInExam = false;
+        student.examStartTime = null;
+      }
+      
       this.notifyStatusUpdate();
     }
   }
@@ -539,6 +563,170 @@ class StudentMonitoringService {
     // This would be implemented to return recent activities for a specific student
     // For now, we'll return all activities and filter in the component
     return [];
+  }
+
+  // Capture snapshot from student's camera
+  public async captureSnapshot(studentId: string): Promise<boolean> {
+    try {
+      const student = this.students.get(studentId);
+      if (!student) return false;
+
+      // Access camera stream
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { width: 1280, height: 720 } 
+      });
+
+      // Create video element
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+
+      // Wait for video to load
+      await new Promise(resolve => {
+        video.onloadedmetadata = resolve;
+      });
+
+      // Create canvas and draw video frame
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return false;
+
+      ctx.drawImage(video, 0, 0);
+
+      // Stop stream
+      stream.getTracks().forEach(track => track.stop());
+
+      // Convert canvas to base64 image
+      const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+      // Create snapshot object
+      const snapshot: StudentSnapshot = {
+        id: `snapshot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        studentId,
+        timestamp: new Date(),
+        imageData,
+        studentName: student.name,
+        enrollmentNo: student.enrollmentNo
+      };
+
+      // Store snapshot
+      if (!this.snapshots.has(studentId)) {
+        this.snapshots.set(studentId, []);
+      }
+      this.snapshots.get(studentId)!.push(snapshot);
+
+      // Store in localStorage for persistence
+      try {
+        const storedSnapshots = JSON.parse(localStorage.getItem('studentSnapshots') || '{}');
+        if (!storedSnapshots[studentId]) {
+          storedSnapshots[studentId] = [];
+        }
+        storedSnapshots[studentId].push({
+          ...snapshot,
+          timestamp: snapshot.timestamp.toISOString()
+        });
+        localStorage.setItem('studentSnapshots', JSON.stringify(storedSnapshots));
+      } catch (err) {
+        console.error('Error storing snapshot in localStorage:', err);
+      }
+
+      // Notify snapshot callbacks
+      this.notifySnapshotUpdate(studentId);
+
+      return true;
+    } catch (error) {
+      console.error('Error capturing snapshot:', error);
+      return false;
+    }
+  }
+
+  // Get snapshots for a specific student
+  public getStudentSnapshots(studentId: string): StudentSnapshot[] {
+    const snapshots = this.snapshots.get(studentId);
+    if (snapshots) {
+      return snapshots;
+    }
+
+    // Try to load from localStorage if not in memory
+    try {
+      const storedSnapshots = JSON.parse(localStorage.getItem('studentSnapshots') || '{}');
+      if (storedSnapshots[studentId]) {
+        const loadedSnapshots = storedSnapshots[studentId].map((snap: any) => ({
+          ...snap,
+          timestamp: new Date(snap.timestamp)
+        }));
+        this.snapshots.set(studentId, loadedSnapshots);
+        return loadedSnapshots;
+      }
+    } catch (err) {
+      console.error('Error loading snapshots from localStorage:', err);
+    }
+
+    return [];
+  }
+
+  // Download snapshot
+  public downloadSnapshot(snapshotId: string, studentId: string): void {
+    const snapshots = this.snapshots.get(studentId) || [];
+    const snapshot = snapshots.find(s => s.id === snapshotId);
+
+    if (!snapshot) {
+      alert('Snapshot not found');
+      return;
+    }
+
+    try {
+      const link = document.createElement('a');
+      link.href = snapshot.imageData;
+      link.download = `snapshot_${snapshot.studentName}_${snapshot.timestamp.toISOString().split('T')[0]}_${snapshot.timestamp.toLocaleTimeString().replace(/:/g, '-')}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error downloading snapshot:', error);
+      alert('Error downloading snapshot');
+    }
+  }
+
+  // Delete snapshot
+  public deleteSnapshot(snapshotId: string, studentId: string): void {
+    const snapshots = this.snapshots.get(studentId);
+    if (snapshots) {
+      const index = snapshots.findIndex(s => s.id === snapshotId);
+      if (index > -1) {
+        snapshots.splice(index, 1);
+        
+        // Update localStorage
+        try {
+          const storedSnapshots = JSON.parse(localStorage.getItem('studentSnapshots') || '{}');
+          if (storedSnapshots[studentId]) {
+            storedSnapshots[studentId] = storedSnapshots[studentId].filter((s: any) => s.id !== snapshotId);
+            localStorage.setItem('studentSnapshots', JSON.stringify(storedSnapshots));
+          }
+        } catch (err) {
+          console.error('Error updating localStorage:', err);
+        }
+
+        this.notifySnapshotUpdate(studentId);
+      }
+    }
+  }
+
+  public onSnapshotUpdate(callback: (snapshots: StudentSnapshot[]) => void) {
+    this.snapshotCallbacks.push(callback);
+    return () => {
+      const index = this.snapshotCallbacks.indexOf(callback);
+      if (index > -1) {
+        this.snapshotCallbacks.splice(index, 1);
+      }
+    };
+  }
+
+  private notifySnapshotUpdate(studentId: string) {
+    const snapshots = this.getStudentSnapshots(studentId);
+    this.snapshotCallbacks.forEach(callback => callback(snapshots));
   }
 }
 

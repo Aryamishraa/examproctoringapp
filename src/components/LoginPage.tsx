@@ -135,6 +135,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
                   required
                   value={formData.password}
                   onChange={handleInputChange}
+                  autoComplete="off"
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter your password"
                 />

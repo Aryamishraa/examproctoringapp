@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Mic, MicOff, Camera, CameraOff, Download, AlertTriangle, Eye, EyeOff, Volume2, VolumeX, Bell, Wifi, WifiOff, Clock, UserCheck, Headphones, X, BookOpen, Trophy, Activity, TrendingUp } from 'lucide-react';
-import { studentMonitoringService, StudentStatus, StudentActivity } from '../services/StudentMonitoringService';
+import { Users, Mic, MicOff, Camera, CameraOff, Download, AlertTriangle, Eye, EyeOff, Volume2, VolumeX, Bell, Wifi, WifiOff, Clock, UserCheck, Headphones, X, BookOpen, Trophy, Activity, TrendingUp, Image } from 'lucide-react';
+import { studentMonitoringService, StudentStatus, StudentActivity, StudentSnapshot } from '../services/StudentMonitoringService';
 
 interface AdminPageProps {
   onLogout: () => void;
@@ -19,6 +19,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
     studentName: string;
     enrollmentNo: string;
   }[]>([]);
+  const [snapshots, setSnapshots] = useState<StudentSnapshot[]>([]);
   const [audioLevel, setAudioLevel] = useState(0);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [isListeningToStudent, setIsListeningToStudent] = useState(false);
@@ -60,6 +61,12 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
       }
     });
 
+    const unsubscribeSnapshot = selectedStudent 
+      ? studentMonitoringService.onSnapshotUpdate((snaps) => {
+          setSnapshots(snaps);
+        })
+      : undefined;
+
     // Load existing recordings from localStorage
     const loadExistingRecordings = () => {
       try {
@@ -84,11 +91,38 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
 
     loadExistingRecordings();
 
+    // Load snapshots for selected student from service and localStorage
+    if (selectedStudent) {
+      const loadedSnapshots = studentMonitoringService.getStudentSnapshots(selectedStudent.id);
+      if (loadedSnapshots.length === 0) {
+        // Try loading from localStorage if not in memory
+        try {
+          const storedSnapshots = JSON.parse(localStorage.getItem('studentSnapshots') || '{}');
+          if (storedSnapshots[selectedStudent.id]) {
+            const persistedSnaps = storedSnapshots[selectedStudent.id].map((s: any) => ({
+              ...s,
+              timestamp: new Date(s.timestamp)
+            }));
+            setSnapshots(persistedSnaps);
+          } else {
+            setSnapshots([]);
+          }
+        } catch (err) {
+          setSnapshots([]);
+        }
+      } else {
+        setSnapshots(loadedSnapshots);
+      }
+    }
+
     return () => {
       unsubscribeStatus();
       unsubscribeActivity();
+      if (unsubscribeSnapshot) {
+        unsubscribeSnapshot();
+      }
     };
-  }, [showNotifications, lastStudentAppeared, selectedStudent]);
+  }, [showNotifications, lastStudentAppeared, selectedStudent])
 
   const showBrowserNotification = (activity: StudentActivity) => {
     if ('Notification' in window && Notification.permission === 'granted') {
@@ -1205,6 +1239,82 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                     </div>
                   </div>
                 )}
+
+                {/* Snapshots Section */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-medium text-gray-900 flex items-center">
+                      <Image className="h-5 w-5 mr-2 text-indigo-600" />
+                      Student Snapshots
+                    </h3>
+                    <button
+                      onClick={async () => {
+                        if (selectedStudent) {
+                          const success = await studentMonitoringService.captureSnapshot(selectedStudent.id);
+                          if (success) {
+                            setSnapshots(studentMonitoringService.getStudentSnapshots(selectedStudent.id));
+                            alert('Snapshot captured successfully');
+                          } else {
+                            alert('Failed to capture snapshot');
+                          }
+                        }
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded text-sm transition duration-200 flex items-center space-x-1"
+                      title="Capture snapshot"
+                    >
+                      <Camera className="h-4 w-4" />
+                      <span>Capture</span>
+                    </button>
+                  </div>
+                  {snapshots.length === 0 ? (
+                    <div className="text-center py-6 bg-gray-50 rounded-lg border border-gray-200">
+                      <Image className="h-10 w-10 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">No snapshots captured yet</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                      {snapshots.map((snapshot) => (
+                        <div key={snapshot.id} className="bg-gray-50 rounded-lg p-2 border hover:shadow-md transition-shadow">
+                          <div className="relative mb-2">
+                            <img 
+                              src={snapshot.imageData} 
+                              alt={`Snapshot of ${snapshot.studentName}`}
+                              className="w-full h-24 object-cover rounded"
+                            />
+                            <div className="absolute top-1 right-1 text-xs bg-black bg-opacity-50 text-white px-1 py-0.5 rounded">
+                              {snapshot.timestamp.toLocaleTimeString()}
+                            </div>
+                          </div>
+                          <div className="flex space-x-1 mb-2">
+                            <button
+                              onClick={() => studentMonitoringService.downloadSnapshot(snapshot.id, selectedStudent.id)}
+                              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs transition duration-200 flex items-center justify-center space-x-1"
+                              title="Download snapshot"
+                            >
+                              <Download className="h-3 w-3" />
+                              <span>Download</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm('Delete this snapshot?')) {
+                                  studentMonitoringService.deleteSnapshot(snapshot.id, selectedStudent.id);
+                                  setSnapshots(studentMonitoringService.getStudentSnapshots(selectedStudent.id));
+                                }
+                              }}
+                              className="px-2 py-1 bg-red-100 text-red-700 rounded text-xs hover:bg-red-200 transition duration-200"
+                              title="Delete snapshot"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                          <div className="text-xs text-gray-600 truncate">
+                            {snapshot.timestamp.toLocaleDateString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* Student Activities */}
                 <div className="mb-6">

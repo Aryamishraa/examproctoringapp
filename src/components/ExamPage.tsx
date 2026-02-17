@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { LogOut, Camera, Mic, ChevronLeft, ChevronRight, Flag, SkipForward, Save } from 'lucide-react';
+import { LogOut, Camera, Mic, ChevronLeft, ChevronRight, Flag, SkipForward, Save, AlertTriangle, X } from 'lucide-react';
 import { User } from '../App';
 import { questions } from '../data/questions';
 import { examService } from '../services/ExamService';
+import { studentMonitoringService, StudentActivity } from '../services/StudentMonitoringService';
 import CameraFeed from './CameraFeed';
 
 interface ExamPageProps {
@@ -22,6 +23,7 @@ const ExamPage: React.FC<ExamPageProps> = ({ user, onSubmitExam, onLogout }) => 
   const [examStartTime] = useState(Date.now());
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [examWarnings, setExamWarnings] = useState<StudentActivity[]>([]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -37,6 +39,25 @@ const ExamPage: React.FC<ExamPageProps> = ({ user, onSubmitExam, onLogout }) => 
 
     return () => clearInterval(timer);
   }, [onSubmitExam]);
+
+  useEffect(() => {
+    // Subscribe to exam warnings/activities
+    const unsubscribe = studentMonitoringService.onActivity((activity) => {
+      // Only track warning_received activities
+      if (user.studentId && activity.studentId === user.studentId && activity.type === 'warning_received') {
+        setExamWarnings(prev => {
+          // Prevent duplicate warnings by checking if one with same timestamp already exists
+          const isDuplicate = prev.some(w => Math.abs(w.timestamp.getTime() - activity.timestamp.getTime()) < 100);
+          if (isDuplicate) {
+            return prev;
+          }
+          return [activity, ...prev];
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user.studentId]);
 
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -191,6 +212,46 @@ const ExamPage: React.FC<ExamPageProps> = ({ user, onSubmitExam, onLogout }) => 
           </div>
         </div>
       </header>
+
+      {/* Exam Monitoring Warnings */}
+      {examWarnings.length > 0 && (
+        <div className="bg-red-50 border-b border-red-200 px-4 sm:px-6 lg:px-8 py-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+                <h3 className="text-sm font-semibold text-red-900">Exam Monitoring Warnings ({examWarnings.length})</h3>
+              </div>
+              <button
+                onClick={() => setExamWarnings([])}
+                className="text-red-600 hover:text-red-800 text-sm font-medium"
+              >
+                Clear All
+              </button>
+            </div>
+            <div className="space-y-2 max-h-32 overflow-y-auto">
+              {examWarnings.map((warning, index) => (
+                <div key={index} className={`flex items-center justify-between p-2 rounded text-sm ${
+                  warning.severity === 'high' ? 'bg-red-100 text-red-800' :
+                  warning.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-green-100 text-green-800'
+                }`}>
+                  <div className="flex-1">
+                    <span className="font-medium">{warning.details}</span>
+                    <span className="text-xs opacity-75 ml-2">{warning.timestamp.toLocaleTimeString()}</span>
+                  </div>
+                  <button
+                    onClick={() => setExamWarnings(prev => prev.filter((_, i) => i !== index))}
+                    className="ml-2 opacity-75 hover:opacity-100"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
