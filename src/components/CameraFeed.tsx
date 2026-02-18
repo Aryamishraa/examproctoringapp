@@ -1,12 +1,20 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { Camera, AlertTriangle } from 'lucide-react';
+import { studentMonitoringService } from '../services/StudentMonitoringService';
+import { User } from '../App';
 
-const CameraFeed: React.FC = () => {
+interface CameraFeedProps {
+  user?: User;
+  onCameraStatusChange?: (status: boolean) => void;
+}
+
+const CameraFeed: React.FC<CameraFeedProps> = ({ user, onCameraStatusChange }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [faceDetected, setFaceDetected] = useState(true);
   const [isActive, setIsActive] = useState(false);
   const [error, setError] = useState<string>('');
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [lastVisibilityStatus, setLastVisibilityStatus] = useState(true);
 
   useEffect(() => {
     const startCamera = async () => {
@@ -24,12 +32,14 @@ const CameraFeed: React.FC = () => {
           videoRef.current.srcObject = mediaStream;
           setStream(mediaStream);
           setIsActive(true);
+          onCameraStatusChange?.(true);
           setError('');
         }
       } catch (err) {
         console.error('Error accessing camera:', err);
         setError('Camera access denied. Please allow camera permissions for exam monitoring.');
         setIsActive(false);
+        onCameraStatusChange?.(false);
       }
     };
 
@@ -39,20 +49,51 @@ const CameraFeed: React.FC = () => {
     return () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
+        onCameraStatusChange?.(false);
       }
     };
   }, []);
 
   useEffect(() => {
+    // Monitor stream state - detect when video tracks are stopped
+    if (stream) {
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const onTrackEnded = () => {
+          setIsActive(false);
+          onCameraStatusChange?.(false);
+        };
+        
+        videoTrack.addEventListener('ended', onTrackEnded);
+        return () => videoTrack.removeEventListener('ended', onTrackEnded);
+      }
+    }
+  }, [stream, onCameraStatusChange]);
+
+  useEffect(() => {
     // Simulate face detection status changes
     if (isActive) {
       const interval = setInterval(() => {
-        setFaceDetected(Math.random() > 0.1); // 90% chance of face detection
+        setFaceDetected(prev => {
+          const newStatus = Math.random() > 0.1; // 90% chance of face detection
+          
+          // If face detection status changed and student is not visible, record activity
+          if (prev !== newStatus && !newStatus && user?.studentId) {
+            studentMonitoringService.recordActivity(
+              user.studentId,
+              'student_not_visible',
+              'Student not visible in camera',
+              'high'
+            );
+          }
+          
+          return newStatus;
+        });
       }, 2000);
 
       return () => clearInterval(interval);
     }
-  }, [isActive]);
+  }, [isActive, user?.studentId]);
 
   if (error) {
     return (

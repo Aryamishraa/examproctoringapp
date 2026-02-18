@@ -1,7 +1,7 @@
 export interface StudentActivity {
   studentId: string;
   timestamp: Date;
-  type: 'tab_switch' | 'camera_off' | 'camera_on' | 'mic_off' | 'mic_on' | 'speaking' | 'silent' | 'disconnected' | 'reconnected' | 'login' | 'logout' | 'exam_start' | 'exam_submit' | 'question_answer' | 'question_skip' | 'warning_received';
+  type: 'tab_switch' | 'camera_off' | 'camera_on' | 'mic_off' | 'mic_on' | 'speaking' | 'silent' | 'disconnected' | 'reconnected' | 'login' | 'logout' | 'exam_start' | 'exam_submit' | 'question_answer' | 'question_skip' | 'warning_received' | 'student_not_visible';
   details?: string;
   severity: 'low' | 'medium' | 'high';
   metadata?: any; // Additional data like exam scores, question details, etc.

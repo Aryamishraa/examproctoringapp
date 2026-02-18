@@ -20,6 +20,7 @@ const ExamPage: React.FC<ExamPageProps> = ({ user, onSubmitExam, onLogout }) => 
   const [questionStatuses, setQuestionStatuses] = useState<{ [key: number]: QuestionStatus }>({});
   const [timeRemaining, setTimeRemaining] = useState(3 * 60 * 60); // 3 hours in seconds
   const [showCamera, setShowCamera] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(true);
   const [examStartTime] = useState(Date.now());
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -43,8 +44,9 @@ const ExamPage: React.FC<ExamPageProps> = ({ user, onSubmitExam, onLogout }) => 
   useEffect(() => {
     // Subscribe to exam warnings/activities
     const unsubscribe = studentMonitoringService.onActivity((activity) => {
-      // Only track warning_received activities
-      if (user.studentId && activity.studentId === user.studentId && activity.type === 'warning_received') {
+      // Track monitoring and warning activities
+      const monitoringActivityTypes = ['warning_received', 'camera_off', 'camera_on', 'mic_off', 'mic_on', 'tab_switch', 'speaking', 'silent', 'disconnected', 'student_not_visible'];
+      if (user.studentId && activity.studentId === user.studentId && monitoringActivityTypes.includes(activity.type)) {
         setExamWarnings(prev => {
           // Prevent duplicate warnings by checking if one with same timestamp already exists
           const isDuplicate = prev.some(w => Math.abs(w.timestamp.getTime() - activity.timestamp.getTime()) < 100);
@@ -58,6 +60,19 @@ const ExamPage: React.FC<ExamPageProps> = ({ user, onSubmitExam, onLogout }) => 
 
     return () => unsubscribe();
   }, [user.studentId]);
+
+  const handleCameraStatusChange = (status: boolean) => {
+    if (!status && isCameraOn && user.studentId) {
+      // Camera turned off, record activity
+      studentMonitoringService.recordActivity(
+        user.studentId,
+        'camera_off',
+        'Camera turned off',
+        'high'
+      );
+    }
+    setIsCameraOn(status);
+  };
 
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -191,8 +206,10 @@ const ExamPage: React.FC<ExamPageProps> = ({ user, onSubmitExam, onLogout }) => 
             </div>
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2">
-                <Camera className="h-4 w-4 text-green-600" />
-                <span className="text-sm text-green-600">Camera On</span>
+                <Camera className={`h-4 w-4 ${isCameraOn ? 'text-green-600' : 'text-red-600'}`} />
+                <span className={`text-sm ${isCameraOn ? 'text-green-600' : 'text-red-600'}`}>
+                  Camera {isCameraOn ? 'On' : 'Off'}
+                </span>
               </div>
               <div className="flex items-center space-x-2">
                 <Mic className="h-4 w-4 text-green-600" />
@@ -436,7 +453,7 @@ const ExamPage: React.FC<ExamPageProps> = ({ user, onSubmitExam, onLogout }) => 
             {showCamera && (
               <div className="bg-white rounded-xl shadow-lg p-4">
                 <h3 className="text-sm font-medium text-gray-900 mb-3">Camera Monitoring</h3>
-                <CameraFeed />
+                <CameraFeed user={user} onCameraStatusChange={handleCameraStatusChange} />
               </div>
             )}
 

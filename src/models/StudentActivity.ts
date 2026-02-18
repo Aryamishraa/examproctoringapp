@@ -3,7 +3,7 @@ import mongoose, { Document, Schema } from 'mongoose';
 export interface IStudentActivity extends Document {
   studentId: mongoose.Types.ObjectId;
   timestamp: Date;
-  type: 'tab_switch' | 'camera_off' | 'camera_on' | 'mic_off' | 'mic_on' | 'speaking' | 'silent' | 'disconnected' | 'reconnected' | 'login' | 'logout' | 'exam_start' | 'exam_submit' | 'question_answer' | 'question_skip' | 'warning_received';
+  type: 'tab_switch' | 'camera_off' | 'camera_on' | 'mic_off' | 'mic_on' | 'speaking' | 'silent' | 'disconnected' | 'reconnected' | 'login' | 'logout' | 'exam_start' | 'exam_submit' | 'question_answer' | 'question_skip' | 'warning_received' | 'student_not_visible';
   details: string;
   severity: 'low' | 'medium' | 'high';
   metadata: any; // Additional data like exam scores, question details, etc.
@@ -32,7 +32,7 @@ const StudentActivitySchema = new Schema<IStudentActivity>({
       'tab_switch', 'camera_off', 'camera_on', 'mic_off', 'mic_on', 
       'speaking', 'silent', 'disconnected', 'reconnected', 'login', 
       'logout', 'exam_start', 'exam_submit', 'question_answer', 
-      'question_skip', 'warning_received'
+      'question_skip', 'warning_received', 'student_not_visible'
     ]
   },
   details: {
