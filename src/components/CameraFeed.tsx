@@ -34,6 +34,17 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ user, onCameraStatusChange }) =
           setIsActive(true);
           onCameraStatusChange?.(true);
           setError('');
+          // Register stream and video element with monitoring service for real snapshot capture
+          if (user?.studentId) {
+            try {
+              studentMonitoringService.registerStudentVideoStream(user.studentId, mediaStream);
+              if (videoRef.current) {
+                studentMonitoringService.registerStudentVideoElement(user.studentId, videoRef.current);
+              }
+            } catch (err) {
+              console.warn('Could not register video stream with monitoring service', err);
+            }
+          }
         }
       } catch (err) {
         console.error('Error accessing camera:', err);
@@ -48,6 +59,15 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ user, onCameraStatusChange }) =
     // Cleanup function
     return () => {
       if (stream) {
+        // Unregister from monitoring service and stop tracks
+        if (user?.studentId) {
+          try {
+            studentMonitoringService.unregisterStudentVideoStream(user.studentId);
+            studentMonitoringService.unregisterStudentVideoElement(user.studentId);
+          } catch (err) {
+            console.warn('Error unregistering video from monitoring service', err);
+          }
+        }
         stream.getTracks().forEach(track => track.stop());
         onCameraStatusChange?.(false);
       }
@@ -71,25 +91,57 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ user, onCameraStatusChange }) =
   }, [stream, onCameraStatusChange]);
 
   useEffect(() => {
-    // Simulate face detection status changes
+    // Face detection using experimental FaceDetector API when available,
+    // otherwise fall back to simple 90% random simulation.
     if (isActive) {
-      const interval = setInterval(() => {
-        setFaceDetected(prev => {
-          const newStatus = Math.random() > 0.1; // 90% chance of face detection
-          
-          // If face detection status changed and student is not visible, record activity
-          if (prev !== newStatus && !newStatus && user?.studentId) {
-            studentMonitoringService.recordActivity(
-              user.studentId,
-              'student_not_visible',
-              'Student not visible in camera',
-              'high'
-            );
+      let interval: number;
+      const canvas = document.createElement('canvas');
+      const detector: any = ('FaceDetector' in window) ? new (window as any).FaceDetector() : null;
+
+      const checkFrame = async () => {
+        if (!videoRef.current) return;
+        const video = videoRef.current;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(video, 0, 0);
+
+        let newStatus = false;
+        if (detector) {
+          try {
+            const faces = await detector.detect(canvas);
+            newStatus = faces.length > 0;
+          } catch {
+            newStatus = Math.random() > 0.1;
           }
-          
+        } else {
+          newStatus = Math.random() > 0.1;
+        }
+
+        setFaceDetected(prev => {
+          if (prev !== newStatus && user?.studentId) {
+            if (!newStatus) {
+              studentMonitoringService.recordActivity(
+                user.studentId,
+                'student_not_visible',
+                'Student not visible in camera',
+                'high'
+              );
+            } else {
+              studentMonitoringService.recordActivity(
+                user.studentId,
+                'camera_on',
+                'Student visible in camera',
+                'low'
+              );
+            }
+          }
           return newStatus;
         });
-      }, 2000);
+      };
+
+      interval = window.setInterval(checkFrame, 300); // check every 300ms
 
       return () => clearInterval(interval);
     }

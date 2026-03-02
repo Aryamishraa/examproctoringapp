@@ -31,6 +31,9 @@ export interface StudentStatus {
   lastExamScore: number | null;
   totalTimeSpent: number; // Total time spent in exams (in seconds)
   activityCount: number; // Total number of activities logged
+  // Optional runtime attachments for capturing video frames
+  videoStream?: MediaStream;
+  videoElement?: HTMLVideoElement;
 }
 
 export interface ExamRecord {
@@ -70,11 +73,14 @@ class StudentMonitoringService {
   private statusCallbacks: ((status: StudentStatus[]) => void)[] = [];
   private snapshotCallbacks: ((snapshots: StudentSnapshot[]) => void)[] = [];
   private monitoringInterval: NodeJS.Timeout | null = null;
+  private snapshotInterval: NodeJS.Timeout | null = null;
   private tabVisibilityHandler: (() => void) | null = null;
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
   private microphone: MediaStreamAudioSourceNode | null = null;
   private audioStream: MediaStream | null = null;
+  // Track last event timestamps to debounce/flter rapid duplicate events per student
+  private lastEventTimestamps: Map<string, number> = new Map();
 
   constructor() {
     this.startMonitoring();
@@ -146,6 +152,9 @@ class StudentMonitoringService {
       this.simulateStudentActivities();
       this.notifyStatusUpdate();
     }, 3000);
+
+    // Start periodic snapshots for demo/admin view (every 10 seconds)
+    this.startAutoSnapshots();
   }
 
   public stopMonitoring() {
@@ -156,12 +165,244 @@ class StudentMonitoringService {
       clearInterval(this.monitoringInterval);
     }
     this.stopAudioMonitoring();
+    this.stopAutoSnapshots();
+  }
+
+  // Start automatic snapshots for each online student every 30s (only real webcam frames, no simulated)
+  private startAutoSnapshots() {
+    if (this.snapshotInterval) return;
+    try {
+      // Run every 30 seconds per user request
+      this.snapshotInterval = setInterval(() => {
+        this.students.forEach((student, studentId) => {
+          if (student.isOnline) {
+            // Only capture real student webcam frames; skip if stream not available
+            (async () => {
+              await this.captureSnapshotFromStudent(studentId).catch(() => {
+                // silently skip if no real stream available
+              });
+            })();
+          }
+        });
+      }, 30000);
+    } catch (err) {
+      console.error('Failed to start auto snapshots:', err);
+    }
+  }
+
+  private stopAutoSnapshots() {
+    if (this.snapshotInterval) {
+      clearInterval(this.snapshotInterval);
+      this.snapshotInterval = null;
+    }
+  }
+
+  // Generate a simulated snapshot (canvas) to represent student's webcam frame
+  private generateSimulatedSnapshot(studentId: string, studentName: string, enrollmentNo: string) {
+    try {
+      // Create canvas and draw a simple placeholder image with name and timestamp
+      const canvas = document.createElement('canvas');
+      const width = 640;
+      const height = 360;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Background
+      ctx.fillStyle = '#f3f4f6';
+      ctx.fillRect(0, 0, width, height);
+
+      // Header bar
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(0, 0, width, 48);
+
+      // Student name
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '20px sans-serif';
+      ctx.fillText(`${studentName} (${enrollmentNo})`, 12, 32);
+
+      // Timestamp
+      const ts = new Date();
+      ctx.fillStyle = '#374151';
+      ctx.font = '16px sans-serif';
+      ctx.fillText(ts.toLocaleString(), 12, height - 12);
+
+      // Draw a simple avatar/placeholder
+      ctx.fillStyle = '#e5e7eb';
+      ctx.beginPath();
+      ctx.arc(width - 80, 80, 56, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#9ca3af';
+      ctx.font = '24px sans-serif';
+      ctx.fillText(studentName.split(' ')[0].charAt(0) || 'S', width - 92, 92);
+
+      const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+      const snapshot: StudentSnapshot = {
+        id: `snapshot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        studentId,
+        timestamp: ts,
+        imageData,
+        studentName,
+        enrollmentNo
+      };
+
+      if (!this.snapshots.has(studentId)) {
+        this.snapshots.set(studentId, []);
+      }
+      this.snapshots.get(studentId)!.push(snapshot);
+
+      // Persist to localStorage
+      try {
+        const stored = JSON.parse(localStorage.getItem('studentSnapshots') || '{}');
+        if (!stored[studentId]) stored[studentId] = [];
+        stored[studentId].push({ ...snapshot, timestamp: snapshot.timestamp.toISOString() });
+        localStorage.setItem('studentSnapshots', JSON.stringify(stored));
+      } catch (err) {
+        console.error('Error persisting simulated snapshot:', err);
+      }
+
+      // Notify listeners
+      this.notifySnapshotUpdate(studentId);
+    } catch (err) {
+      console.error('Error generating simulated snapshot:', err);
+    }
+  }
+
+  // Attempt to capture a snapshot from a student's provided video element or MediaStream.
+  // Returns true if a real capture was made, false otherwise.
+  private async captureSnapshotFromStudent(studentId: string): Promise<boolean> {
+    const student = this.students.get(studentId);
+    if (!student) return false;
+
+    try {
+      const candidate: any = student as any;
+
+      // If a video element is directly attached to the student object, use it
+        // Wait up to 1s for frames to become ready before giving up
+      if (candidate.videoElement && candidate.videoElement instanceof HTMLVideoElement) {
+        const videoEl: HTMLVideoElement = candidate.videoElement;
+        const waitForFrames = async (maxWait = 1000) => {
+          const start = Date.now();
+          while ((videoEl.videoWidth === 0 || videoEl.videoHeight === 0) && (Date.now() - start) < maxWait) {
+            await new Promise(r => setTimeout(r, 200));
+          }
+        };
+
+        await waitForFrames(1000);
+        if (videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+          const canvas = document.createElement('canvas');
+          canvas.width = videoEl.videoWidth;
+          canvas.height = videoEl.videoHeight;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return false;
+          try {
+            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+          } catch (err) {
+            return false;
+          }
+          const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+          const snapshot: StudentSnapshot = {
+            id: `snapshot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            studentId,
+            timestamp: new Date(),
+            imageData,
+            studentName: student.name,
+            enrollmentNo: student.enrollmentNo
+          };
+
+          if (!this.snapshots.has(studentId)) this.snapshots.set(studentId, []);
+          this.snapshots.get(studentId)!.push(snapshot);
+
+          try {
+            const stored = JSON.parse(localStorage.getItem('studentSnapshots') || '{}');
+            if (!stored[studentId]) stored[studentId] = [];
+            stored[studentId].push({ ...snapshot, timestamp: snapshot.timestamp.toISOString() });
+            localStorage.setItem('studentSnapshots', JSON.stringify(stored));
+          } catch (err) {
+            console.error('Error persisting captured snapshot:', err);
+          }
+
+          this.notifySnapshotUpdate(studentId);
+          return true;
+        }
+      }
+
+      // If a MediaStream is attached to the student, attach to a temporary video element and capture
+      if (candidate.videoStream && candidate.videoStream instanceof MediaStream) {
+        const tempVideo = document.createElement('video');
+        tempVideo.srcObject = candidate.videoStream;
+        tempVideo.muted = true;
+        tempVideo.playsInline = true;
+        try {
+          await tempVideo.play().catch(() => {});
+        } catch (e) {
+          // ignore
+        }
+
+        const start = Date.now();
+        while ((tempVideo.videoWidth === 0 || tempVideo.videoHeight === 0) && (Date.now() - start) < 1000) {
+          await new Promise(r => setTimeout(r, 200));
+        }
+
+        const width = tempVideo.videoWidth || 640;
+        const height = tempVideo.videoHeight || 360;
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return false;
+
+        try {
+          ctx.drawImage(tempVideo, 0, 0, width, height);
+        } catch (err) {
+          return false;
+        }
+        const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+        const snapshot: StudentSnapshot = {
+          id: `snapshot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          studentId,
+          timestamp: new Date(),
+          imageData,
+          studentName: student.name,
+          enrollmentNo: student.enrollmentNo
+        };
+
+        if (!this.snapshots.has(studentId)) this.snapshots.set(studentId, []);
+        this.snapshots.get(studentId)!.push(snapshot);
+
+        try {
+          const stored = JSON.parse(localStorage.getItem('studentSnapshots') || '{}');
+          if (!stored[studentId]) stored[studentId] = [];
+          stored[studentId].push({ ...snapshot, timestamp: snapshot.timestamp.toISOString() });
+          localStorage.setItem('studentSnapshots', JSON.stringify(stored));
+        } catch (err) {
+          console.error('Error persisting captured snapshot:', err);
+        }
+
+        this.notifySnapshotUpdate(studentId);
+        return true;
+      }
+
+      return false;
+    } catch (err) {
+      console.error('Error capturing snapshot from student object:', err);
+      return false;
+    }
   }
 
   private updateTabActivity(isVisible: boolean) {
     // Simulate tab switching for demo purposes
     if (!isVisible) {
-      this.recordActivity('1', 'tab_switch', 'Student switched to another tab', 'medium');
+      // record for every online student rather than hardcoded id
+      this.students.forEach((student, studentId) => {
+        if (student.isOnline) {
+          this.recordActivity(studentId, 'tab_switch', 'Student switched to another tab', 'medium');
+        }
+      });
     }
   }
 
@@ -247,6 +488,12 @@ class StudentMonitoringService {
     
     // Notify status update
     this.notifyStatusUpdate();
+
+    // Automatically start audio monitoring for this student so speaking events are captured
+    this.startAudioMonitoring(studentId).catch(err => {
+      // ignore any permission errors
+      console.warn('Audio monitoring failed for student', studentId, err);
+    });
     
     return studentId;
   }
@@ -410,27 +657,53 @@ class StudentMonitoringService {
   }
 
   public recordActivity(studentId: string, type: StudentActivity['type'], details: string, severity: StudentActivity['severity'], metadata?: any) {
-    const activity: StudentActivity = {
-      studentId,
-      timestamp: new Date(),
-      type,
-      details,
-      severity,
-      metadata
-    };
+    // Debounce/filter noisy events to avoid rapid fluctuations and false positives
+    try {
+      const now = Date.now();
+      const key = `${studentId}:${type}`;
 
-    // Update student status
-    const student = this.students.get(studentId);
-    if (student) {
-      if (severity === 'high') {
-        student.warnings += 1;
+      // minimum interval (ms) between repeated events of the same type for the same student
+      const thresholds: Record<string, number> = {
+        student_not_visible: 10000, // require 10s between not-visible warnings
+        tab_switch: 5000, // require 5s between tab switches
+        camera_off: 5000,
+        camera_on: 2000,
+        speaking: 1000,
+        silent: 1000
+      };
+
+      const minInterval = thresholds[type] ?? 0;
+      const last = this.lastEventTimestamps.get(key) || 0;
+      if (minInterval > 0 && (now - last) < minInterval) {
+        // ignore noisy duplicate event
+        return;
       }
-      student.lastActivity = new Date();
-      student.activityCount += 1;
-    }
+      this.lastEventTimestamps.set(key, now);
 
-    // Notify activity callbacks
-    this.activityCallbacks.forEach(callback => callback(activity));
+      const activity: StudentActivity = {
+        studentId,
+        timestamp: new Date(now),
+        type,
+        details,
+        severity,
+        metadata
+      };
+
+      // Update student status
+      const student = this.students.get(studentId);
+      if (student) {
+        if (severity === 'high') {
+          student.warnings += 1;
+        }
+        student.lastActivity = new Date();
+        student.activityCount += 1;
+      }
+
+      // Notify activity callbacks
+      this.activityCallbacks.forEach(callback => callback(activity));
+    } catch (err) {
+      console.error('Error recording activity:', err);
+    }
   }
 
   public getStudentStatus(studentId: string): StudentStatus | undefined {
@@ -727,6 +1000,38 @@ class StudentMonitoringService {
   private notifySnapshotUpdate(studentId: string) {
     const snapshots = this.getStudentSnapshots(studentId);
     this.snapshotCallbacks.forEach(callback => callback(snapshots));
+  }
+
+  // Register a student's MediaStream so the service can capture actual webcam frames
+  public registerStudentVideoStream(studentId: string, stream: MediaStream) {
+    const student = this.students.get(studentId);
+    if (student) {
+      (student as any).videoStream = stream;
+    }
+  }
+
+  // Unregister the MediaStream reference (do not stop tracks here)
+  public unregisterStudentVideoStream(studentId: string) {
+    const student = this.students.get(studentId);
+    if (student && (student as any).videoStream) {
+      delete (student as any).videoStream;
+    }
+  }
+
+  // Register an HTMLVideoElement associated with the student
+  public registerStudentVideoElement(studentId: string, videoEl: HTMLVideoElement) {
+    const student = this.students.get(studentId);
+    if (student) {
+      (student as any).videoElement = videoEl;
+    }
+  }
+
+  // Unregister the video element reference
+  public unregisterStudentVideoElement(studentId: string) {
+    const student = this.students.get(studentId);
+    if (student && (student as any).videoElement) {
+      delete (student as any).videoElement;
+    }
   }
 }
 

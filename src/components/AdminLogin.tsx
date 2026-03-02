@@ -94,6 +94,7 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBackToStudent }) => 
                   required
                   value={formData.password}
                   onChange={handleInputChange}
+                  autoComplete="off"
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
                   placeholder="Enter admin password"
                 />
