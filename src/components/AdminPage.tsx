@@ -159,44 +159,48 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
     return () => stopAudioMonitoring();
   }, [isAudioEnabled, selectedStudent]);
 
+  // unsubscribe handler reference for audio activity listener
+  const audioActivityUnsub = useRef<(() => void) | null>(null);
+
   const startAudioMonitoring = async () => {
     if (!selectedStudent) return;
     
     try {
       const success = await studentMonitoringService.startAudioMonitoring(selectedStudent.id);
       if (success) {
-        // Start audio level monitoring
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const audioContext = new AudioContext();
-        const analyser = audioContext.createAnalyser();
-        const microphone = audioContext.createMediaStreamSource(stream);
-        
-        microphone.connect(analyser);
-        analyser.fftSize = 256;
-        
-        const bufferLength = analyser.frequencyBinCount;
-        const dataArray = new Uint8Array(bufferLength);
-        
-        const updateAudioLevel = () => {
-          if (analyser) {
-            analyser.getByteFrequencyData(dataArray);
-            const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-            setAudioLevel(average);
+        // subscribe to activity events for this student and update level
+        audioActivityUnsub.current = studentMonitoringService.onActivity(activity => {
+          if (activity.studentId !== selectedStudent.id) return;
+          if (activity.type === 'speaking') {
+            setAudioLevel(80);
+          } else if (activity.type === 'silent') {
+            setAudioLevel(0);
           }
-          requestAnimationFrame(updateAudioLevel);
-        };
-        
-        updateAudioLevel();
+        });
       }
     } catch (error) {
-      console.error('Error accessing microphone:', error);
+      console.error('Error starting audio monitoring:', error);
     }
   };
 
   const stopAudioMonitoring = () => {
     studentMonitoringService.stopAudioMonitoring();
     setAudioLevel(0);
+    if (audioActivityUnsub.current) {
+      audioActivityUnsub.current();
+      audioActivityUnsub.current = null;
+    }
   };
+
+  // cleanup when selected student changes
+  useEffect(() => {
+    return () => {
+      if (audioActivityUnsub.current) {
+        audioActivityUnsub.current();
+        audioActivityUnsub.current = null;
+      }
+    };
+  }, [selectedStudent]);
 
   // Function to listen to student's audio
   const startListeningToStudent = async () => {
