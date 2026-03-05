@@ -1,6 +1,9 @@
-import { connectDB, disconnectDB } from '../config/database';
-import { mongoDBService } from '../services/MongoDBService';
-import { Student, Exam, StudentActivity, Recording } from '../models';
+import { connectDB, disconnectDB } from '../config/database.js';
+import { mongoDBService } from '../services/MongoDBService.js';
+import Student from '../models/Student.js';
+import Exam from '../models/Exam.js';
+import StudentActivity from '../models/StudentActivity.js';
+import Recording from '../models/Recording.js';
 
 async function initializeDatabase() {
   try {
