@@ -116,7 +116,28 @@ app.post("/register", async (req, res) => {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    const newStudent = await Student.create({ enrollmentNo, name, passwordHash });
+    const newStudent = await Student.create({ 
+      enrollmentNo, 
+      name, 
+      passwordHash,
+      isOnline: false,
+      isCameraOn: false,
+      isMicOn: false,
+      isSpeaking: false,
+      isTabActive: true,
+      lastActivity: new Date(),
+      warnings: 0,
+      currentTab: '',
+      connectionQuality: 'disconnected',
+      loginTime: null,
+      isInExam: false,
+      totalExamsTaken: 0,
+      averageScore: 0,
+      lastExamDate: null,
+      lastExamScore: null,
+      totalTimeSpent: 0,
+      activityCount: 0
+    });
     res.status(201).json({ message: "Student created ✅", studentId: newStudent._id });
   } catch (err) {
     console.error("Register error:", err);
