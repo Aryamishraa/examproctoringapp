@@ -1,4 +1,4 @@
-const BASE_URL = "http://localhost:5000";
+const BASE_URL = "https://safeexam-backend-t1wh.onrender.com/api";
 
 export const loginUser = async (data) => {
   const response = await fetch(`${BASE_URL}/login`, {
