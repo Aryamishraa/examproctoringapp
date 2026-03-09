@@ -142,12 +142,12 @@ class StudentMonitoringService {
     // Add initial activities to match screenshots
     this.recordActivity(id1, 'tab_switch', 'Student switched to another tab', 'medium');
     this.recordActivity(id3, 'speaking', 'Student started speaking', 'low');
-    
+
     // Priya Kapoor (id2) has multiple warnings and a disconnection in the screenshot
     this.recordActivity(id2, 'warning_received', 'Warning sent by admin (2/3)', 'medium');
     this.recordActivity(id2, 'warning_received', 'Warning sent by admin (3/3)', 'high');
     this.recordActivity(id2, 'disconnected', 'Student disconnected due to 3 warnings', 'high');
-    
+
     // Update Priya's status to disconnected/offline
     this.updateStudentStatus(id2, {
       isOnline: false,
@@ -158,7 +158,7 @@ class StudentMonitoringService {
     // Update others' warning counts to match screenshots
     const aarav = this.students.get(id1);
     if (aarav) aarav.warnings = 1;
-    
+
     const rohit = this.students.get(id3);
     if (rohit) rohit.warnings = 2;
 
@@ -172,11 +172,11 @@ class StudentMonitoringService {
       this.updateTabActivity(isVisible);
     };
     document.addEventListener('visibilitychange', this.tabVisibilityHandler);
-    
+
     // Monitor window focus/blur for more robust detection
     this.blurHandler = () => this.updateTabActivity(false);
     this.focusHandler = () => this.updateTabActivity(true);
-    
+
     window.addEventListener('blur', this.blurHandler);
     window.addEventListener('focus', this.focusHandler);
 
@@ -319,7 +319,7 @@ class StudentMonitoringService {
       const candidate: any = student as any;
 
       // If a video element is directly attached to the student object, use it
-        // Wait up to 1s for frames to become ready before giving up
+      // Wait up to 1s for frames to become ready before giving up
       if (candidate.videoElement && candidate.videoElement instanceof HTMLVideoElement) {
         const videoEl: HTMLVideoElement = candidate.videoElement;
         const waitForFrames = async (maxWait = 1000) => {
@@ -376,7 +376,7 @@ class StudentMonitoringService {
         tempVideo.muted = true;
         tempVideo.playsInline = true;
         try {
-          await tempVideo.play().catch(() => {});
+          await tempVideo.play().catch(() => { });
         } catch {
           // ignore
         }
@@ -452,7 +452,7 @@ class StudentMonitoringService {
 
       // Removed random simulation (tab switching, camera off, speaking) 
       // so warnings only trigger on actual events.
-      
+
       // Update last activity
       student.lastActivity = new Date();
     });
@@ -461,7 +461,7 @@ class StudentMonitoringService {
   // Add new student when they login - now accepts an optional explicit ID from database
   public addStudent(enrollmentNo: string, name: string, initialStatus: string = 'online', explicitId?: string): string {
     const studentId = explicitId || `student_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     const newStudent: StudentStatus = {
       id: studentId,
       name: name,
@@ -489,10 +489,10 @@ class StudentMonitoringService {
     };
 
     this.students.set(studentId, newStudent);
-    
+
     // Record login activity
     this.recordActivity(studentId, 'login', `Student ${name} (${enrollmentNo}) logged in`, 'low');
-    
+
     // Notify status update
     this.notifyStatusUpdate();
 
@@ -501,7 +501,7 @@ class StudentMonitoringService {
       // ignore any permission errors
       console.warn('Audio monitoring failed for student', studentId, err);
     });
-    
+
     return studentId;
   }
 
@@ -572,9 +572,9 @@ class StudentMonitoringService {
       student.examStartTime = null;
 
       this.recordActivity(
-        studentId, 
-        'exam_submit', 
-        `Student ${student.name} completed exam with score ${examData.score}%`, 
+        studentId,
+        'exam_submit',
+        `Student ${student.name} completed exam with score ${examData.score}%`,
         'medium',
         { examRecord }
       );
@@ -600,7 +600,7 @@ class StudentMonitoringService {
 
   // Find student by enrollment number
   public findStudentByEnrollment(enrollmentNo: string): StudentStatus | undefined {
-    return Array.from(this.students.values()).find(student => 
+    return Array.from(this.students.values()).find(student =>
       student.enrollmentNo === enrollmentNo
     );
   }
@@ -608,22 +608,22 @@ class StudentMonitoringService {
   public async startAudioMonitoring(studentId: string): Promise<boolean> {
     try {
       this.audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      
+
       this.audioContext = new AudioContext();
       this.analyser = this.audioContext.createAnalyser();
       this.microphone = this.audioContext.createMediaStreamSource(this.audioStream);
-      
+
       this.microphone.connect(this.analyser);
       this.analyser.fftSize = 256;
-      
+
       const bufferLength = this.analyser.frequencyBinCount;
       const dataArray = new Uint8Array(bufferLength);
-      
+
       const updateAudioLevel = () => {
         if (this.analyser) {
           this.analyser.getByteFrequencyData(dataArray);
           const average = dataArray.reduce((a, b) => a + b) / bufferLength;
-          
+
           // Update student speaking status based on audio level
           const student = this.students.get(studentId);
           if (student && average > 30) { // Threshold for speaking detection
@@ -638,7 +638,7 @@ class StudentMonitoringService {
         }
         requestAnimationFrame(updateAudioLevel);
       };
-      
+
       updateAudioLevel();
       return true;
     } catch (error) {
@@ -741,7 +741,7 @@ class StudentMonitoringService {
     if (student) {
       student.warnings += 1;
       this.recordActivity(studentId, 'warning_received', 'Warning sent by admin', 'medium');
-      
+
       // Auto-disconnect on 3 warnings
       if (student.warnings >= 3) {
         this.recordActivity(studentId, 'disconnected', 'Student disconnected due to 3 warnings', 'high');
@@ -753,7 +753,7 @@ class StudentMonitoringService {
         student.isInExam = false;
         student.examStartTime = null;
       }
-      
+
       this.notifyStatusUpdate();
     }
   }
@@ -862,8 +862,8 @@ class StudentMonitoringService {
       if (!student) return false;
 
       // Access camera stream
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 1280, height: 720 } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720 }
       });
 
       // Create video element
@@ -987,7 +987,7 @@ class StudentMonitoringService {
       const index = snapshots.findIndex(s => s.id === snapshotId);
       if (index > -1) {
         snapshots.splice(index, 1);
-        
+
         // Update localStorage
         try {
           const storedSnapshots = JSON.parse(localStorage.getItem('studentSnapshots') || '{}');

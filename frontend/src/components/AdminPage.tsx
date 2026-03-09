@@ -10,10 +10,10 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
   const [students, setStudents] = useState<StudentStatus[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<StudentStatus | null>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const [recordings, setRecordings] = useState<{ 
-    id: string; 
-    studentId: string; 
-    timestamp: Date; 
+  const [recordings, setRecordings] = useState<{
+    id: string;
+    studentId: string;
+    timestamp: Date;
     duration: number;
     blob: Blob | string;
     studentName: string;
@@ -27,7 +27,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
   const [showNotifications, setShowNotifications] = useState(true);
   const [lastStudentAppeared, setLastStudentAppeared] = useState<StudentStatus | null>(null);
   const [selectedStudentActivities, setSelectedStudentActivities] = useState<StudentActivity[]>([]);
-  
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingStartTime = useRef<number>(0);
   const studentAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -38,13 +38,13 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
     // Load initial data
     const initialStatuses = studentMonitoringService.getAllStudentStatuses();
     setStudents(initialStatuses);
-    
+
     const initialActivities = studentMonitoringService.getRecentActivities(20);
     setRecentActivities(initialActivities);
 
     const unsubscribeStatus = studentMonitoringService.onStatusUpdate((statuses) => {
       setStudents(statuses);
-      
+
       // Track the last student who appeared
       if (statuses.length > 0) {
         const latestStudent = statuses[statuses.length - 1];
@@ -56,22 +56,22 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
 
     const unsubscribeActivity = studentMonitoringService.onActivity((activity) => {
       setRecentActivities(prev => [activity, ...prev.slice(0, 19)]); // Keep last 20 activities
-      
+
       // Add to selected student activities if it matches
       if (selectedStudent && activity.studentId === selectedStudent.id) {
         setSelectedStudentActivities(prev => [activity, ...prev.slice(0, 19)]);
       }
-      
+
       // Show notification for high severity activities
       if (activity.severity === 'high' && showNotifications) {
         showBrowserNotification(activity);
       }
     });
 
-    const unsubscribeSnapshot = selectedStudent 
+    const unsubscribeSnapshot = selectedStudent
       ? studentMonitoringService.onSnapshotUpdate((snaps) => {
-          setSnapshots(snaps);
-        })
+        setSnapshots(snaps);
+      })
       : undefined;
 
     // Load existing recordings from localStorage
@@ -178,7 +178,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
 
   const startAudioMonitoring = async () => {
     if (!selectedStudent) return;
-    
+
     try {
       const success = await studentMonitoringService.startAudioMonitoring(selectedStudent.id);
       if (success) {
@@ -222,31 +222,31 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
 
     try {
       // Request access to student's microphone (this would be the student's actual audio in a real implementation)
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
           echoCancellation: false,
           noiseSuppression: false,
           autoGainControl: false
-        } 
+        }
       });
-      
+
       studentStreamRef.current = stream;
-      
+
       // Create audio element to play student's audio
       if (studentAudioRef.current) {
         studentAudioRef.current.srcObject = stream;
         studentAudioRef.current.play();
         setIsListeningToStudent(true);
       }
-      
+
       // Record activity
       studentMonitoringService.recordActivity(
-        selectedStudent.id, 
-        'speaking', 
-        `Admin started listening to ${selectedStudent.name}`, 
+        selectedStudent.id,
+        'speaking',
+        `Admin started listening to ${selectedStudent.name}`,
         'low'
       );
-      
+
     } catch (error) {
       console.error('Error listening to student audio:', error);
       alert('Unable to access student audio. Please ensure permissions are granted.');
@@ -258,20 +258,20 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
       studentStreamRef.current.getTracks().forEach(track => track.stop());
       studentStreamRef.current = null;
     }
-    
+
     if (studentAudioRef.current) {
       studentAudioRef.current.pause();
       studentAudioRef.current.srcObject = null;
     }
-    
+
     setIsListeningToStudent(false);
-    
+
     // Record activity
     if (selectedStudent) {
       studentMonitoringService.recordActivity(
-        selectedStudent.id, 
-        'silent', 
-        `Admin stopped listening to ${selectedStudent.name}`, 
+        selectedStudent.id,
+        'silent',
+        `Admin stopped listening to ${selectedStudent.name}`,
         'low'
       );
     }
@@ -281,11 +281,11 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
     if (!selectedStudent) return;
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { width: 1280, height: 720 }, 
-        audio: true 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 1280, height: 720 },
+        audio: true
       });
-      
+
       // Try different MIME types for better compatibility
       let mimeType = 'video/webm;codecs=vp9,opus';
       if (!MediaRecorder.isTypeSupported(mimeType)) {
@@ -294,7 +294,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
       if (!MediaRecorder.isTypeSupported(mimeType)) {
         mimeType = 'video/mp4';
       }
-      
+
       mediaRecorderRef.current = new MediaRecorder(stream, {
         mimeType: mimeType,
         videoBitsPerSecond: 2500000, // 2.5 Mbps for good quality
@@ -302,7 +302,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
       });
 
       const chunks: Blob[] = [];
-      
+
       mediaRecorderRef.current.ondataavailable = (event) => {
         if (event.data.size > 0) {
           chunks.push(event.data);
@@ -313,7 +313,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
         const blob = new Blob(chunks, { type: mimeType });
         const recordingId = `recording_${Date.now()}`;
         const duration = Math.floor((Date.now() - recordingStartTime.current) / 1000);
-        
+
         // Create recording object
         const newRecording = {
           id: recordingId,
@@ -324,7 +324,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
           studentName: selectedStudent.name,
           enrollmentNo: selectedStudent.enrollmentNo
         };
-        
+
         setRecordings(prev => [...prev, newRecording]);
 
         // Store recording in localStorage for demo purposes
@@ -337,7 +337,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
           enrollmentNo: selectedStudent.enrollmentNo
         });
         localStorage.setItem('examRecordings', JSON.stringify(recordings));
-        
+
         // Show success message
         alert(`Recording saved successfully! Duration: ${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')}`);
       };
@@ -345,7 +345,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
       mediaRecorderRef.current.start(1000); // Collect data every second
       setIsRecording(true);
       recordingStartTime.current = Date.now();
-      
+
       // Record activity
       studentMonitoringService.recordActivity(
         selectedStudent.id,
@@ -353,7 +353,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
         `Admin started recording ${selectedStudent.name}'s exam session`,
         'medium'
       );
-      
+
     } catch (error) {
       console.error('Error starting recording:', error);
       alert('Unable to start recording. Please ensure camera and microphone permissions are granted.');
@@ -371,13 +371,13 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
   const downloadRecording = (recordingId: string) => {
     // First try to find in current recordings state
     let recording = recordings.find(r => r.id === recordingId);
-    
+
     if (!recording) {
       // Fallback to localStorage
       const storedRecordings = JSON.parse(localStorage.getItem('examRecordings') || '[]');
       recording = storedRecordings.find((r: any) => r.id === recordingId);
     }
-    
+
     if (recording) {
       try {
         // Create blob URL if needed
@@ -387,19 +387,19 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
         } else {
           blobUrl = recording.blob; // It's already a string URL
         }
-        
+
         const link = document.createElement('a');
         link.href = blobUrl;
         link.download = `exam_recording_${recording.studentName || recording.studentId}_${recording.timestamp.toLocaleDateString().replace(/\//g, '-')}_${recording.timestamp.toLocaleTimeString().replace(/:/g, '-')}.webm`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
+
         // Clean up blob URL if we created one
         if (recording.blob instanceof Blob) {
           URL.revokeObjectURL(blobUrl);
         }
-        
+
         // Record download activity
         if (selectedStudent) {
           studentMonitoringService.recordActivity(
@@ -426,13 +426,13 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
     if (window.confirm('Are you sure you want to delete this recording? This action cannot be undone.')) {
       // Remove from current state
       setRecordings(prev => prev.filter(r => r.id !== recordingId));
-      
+
       // Remove from localStorage
       try {
         const storedRecordings = JSON.parse(localStorage.getItem('examRecordings') || '[]');
         const updatedRecordings = storedRecordings.filter((r: any) => r.id !== recordingId);
         localStorage.setItem('examRecordings', JSON.stringify(updatedRecordings));
-        
+
         // Record activity
         if (selectedStudent) {
           studentMonitoringService.recordActivity(
@@ -452,10 +452,10 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
     // Force refresh of student data
     const currentStudents = studentMonitoringService.getAllStudentStatuses();
     setStudents(currentStudents);
-    
+
     // Refresh activities
     setRecentActivities([]);
-    
+
     // Show success message
     alert('Monitoring data refreshed successfully!');
   };
@@ -521,7 +521,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    
+
     if (hours > 0) {
       return `${hours}h ${minutes}m ${secs}s`;
     } else if (minutes > 0) {
@@ -535,7 +535,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
     <div className="min-h-screen bg-gray-50">
       {/* Hidden audio element for student audio */}
       <audio ref={studentAudioRef} autoPlay muted={false} />
-      
+
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -586,7 +586,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                       examHistory: s.examHistory
                     }))
                   };
-                  
+
                   const dataStr = JSON.stringify(exportData, null, 2);
                   const dataBlob = new Blob([dataStr], { type: 'application/json' });
                   const url = URL.createObjectURL(dataBlob);
@@ -606,11 +606,10 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
               </button>
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
-                className={`p-2 rounded-lg transition duration-200 ${
-                  showNotifications 
-                    ? 'bg-green-100 text-green-600 hover:bg-green-200' 
+                className={`p-2 rounded-lg transition duration-200 ${showNotifications
+                    ? 'bg-green-100 text-green-600 hover:bg-green-200'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                  }`}
                 title={showNotifications ? 'Disable Notifications' : 'Enable Notifications'}
               >
                 <Bell className="h-5 w-5" />
@@ -639,7 +638,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                   New Student Logged In
                 </h3>
                 <p className="text-sm text-blue-700 mt-1">
-                  <strong>{lastStudentAppeared.name}</strong> ({lastStudentAppeared.enrollmentNo}) 
+                  <strong>{lastStudentAppeared.name}</strong> ({lastStudentAppeared.enrollmentNo})
                   logged in at {lastStudentAppeared.loginTime.toLocaleTimeString()}
                 </p>
               </div>
@@ -748,7 +747,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
               return (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {studentsInExam.map((student) => {
-                    const examDuration = student.examStartTime 
+                    const examDuration = student.examStartTime
                       ? Math.floor((Date.now() - student.examStartTime.getTime()) / (1000 * 60))
                       : 0;
                     return (
@@ -899,11 +898,10 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                         const studentActivities = recentActivities.filter(a => a.studentId === student.id);
                         setSelectedStudentActivities(studentActivities);
                       }}
-                      className={`p-3 rounded-lg border cursor-pointer transition duration-200 ${
-                        selectedStudent?.id === student.id
+                      className={`p-3 rounded-lg border cursor-pointer transition duration-200 ${selectedStudent?.id === student.id
                           ? 'border-blue-500 bg-blue-50'
                           : 'border-gray-200 hover:border-gray-300'
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
@@ -978,11 +976,10 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                 {recentActivities.map((activity, index) => {
                   const student = students.find(s => s.id === activity.studentId);
                   return (
-                    <div key={index} className={`p-3 rounded-lg border-l-4 ${
-                      activity.severity === 'high' ? 'border-l-red-500 bg-red-50' :
-                      activity.severity === 'medium' ? 'border-l-yellow-500 bg-yellow-50' :
-                      'border-l-green-500 bg-green-50'
-                    }`}>
+                    <div key={index} className={`p-3 rounded-lg border-l-4 ${activity.severity === 'high' ? 'border-l-red-500 bg-red-50' :
+                        activity.severity === 'medium' ? 'border-l-yellow-500 bg-yellow-50' :
+                          'border-l-green-500 bg-green-50'
+                      }`}>
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-gray-900">
@@ -990,11 +987,10 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                           </p>
                           <p className="text-xs text-gray-600">{activity.details}</p>
                         </div>
-                        <span className={`text-xs px-2 py-1 rounded-full ${
-                          activity.severity === 'high' ? 'bg-red-100 text-red-800' :
-                          activity.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-green-100 text-green-800'
-                        }`}>
+                        <span className={`text-xs px-2 py-1 rounded-full ${activity.severity === 'high' ? 'bg-red-100 text-red-800' :
+                            activity.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-green-100 text-green-800'
+                          }`}>
                           {activity.type.replace('_', ' ')}
                         </span>
                       </div>
@@ -1021,7 +1017,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                       Monitoring: {selectedStudent.name}
                     </h2>
                     <p className="text-sm text-gray-500">
-                      Enrollment: {selectedStudent.enrollmentNo} | 
+                      Enrollment: {selectedStudent.enrollmentNo} |
                       Connection: <span className={`${getConnectionQualityColor(selectedStudent.connectionQuality)}`}>
                         {selectedStudent.connectionQuality}
                       </span>
@@ -1031,11 +1027,10 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                     {/* Audio Level Monitor Toggle */}
                     <button
                       onClick={() => setIsAudioEnabled(!isAudioEnabled)}
-                      className={`p-2 rounded-lg transition duration-200 ${
-                        isAudioEnabled 
-                          ? 'bg-green-100 text-green-600 hover:bg-green-200' 
+                      className={`p-2 rounded-lg transition duration-200 ${isAudioEnabled
+                          ? 'bg-green-100 text-green-600 hover:bg-green-200'
                           : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
+                        }`}
                       title="Toggle Audio Level Monitoring"
                     >
                       {isAudioEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
@@ -1082,7 +1077,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                         <span>Stop Recording</span>
                       </button>
                     )}
-                    
+
                     {/* Recording Status */}
                     {isRecording && (
                       <div className="flex items-center space-x-2 px-3 py-2 bg-red-100 text-red-800 rounded-lg">
@@ -1197,7 +1192,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                           <div className="text-sm text-gray-600">Last Score</div>
                         </div>
                       </div>
-                      
+
                       {/* Recent Exam Details */}
                       <div className="space-y-2">
                         {selectedStudent.examHistory.slice(-3).reverse().map((exam, index) => (
@@ -1244,7 +1239,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                         <span className="text-sm font-medium">Real-time Audio Level</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-4">
-                        <div 
+                        <div
                           className="bg-blue-500 h-4 rounded-full transition-all duration-100"
                           style={{ width: `${(audioLevel / 255) * 100}%` }}
                         ></div>
@@ -1294,8 +1289,8 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                       {snapshots.map((snapshot) => (
                         <div key={snapshot.id} className="bg-gray-50 rounded-lg p-2 border hover:shadow-md transition-shadow">
                           <div className="relative mb-2">
-                            <img 
-                              src={snapshot.imageData} 
+                            <img
+                              src={snapshot.imageData}
                               alt={`Snapshot of ${snapshot.studentName}`}
                               className="w-full h-24 object-cover rounded"
                             />
@@ -1342,21 +1337,19 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                   </h3>
                   <div className="space-y-2 max-h-48 overflow-y-auto">
                     {selectedStudentActivities.map((activity, index) => (
-                      <div key={index} className={`p-3 rounded-lg border-l-4 ${
-                        activity.severity === 'high' ? 'border-l-red-500 bg-red-50' :
-                        activity.severity === 'medium' ? 'border-l-yellow-500 bg-yellow-50' :
-                        'border-l-green-500 bg-green-50'
-                      }`}>
+                      <div key={index} className={`p-3 rounded-lg border-l-4 ${activity.severity === 'high' ? 'border-l-red-500 bg-red-50' :
+                          activity.severity === 'medium' ? 'border-l-yellow-500 bg-yellow-50' :
+                            'border-l-green-500 bg-green-50'
+                        }`}>
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-gray-900">{activity.details}</p>
                             <p className="text-xs text-gray-500">{activity.timestamp.toLocaleTimeString()}</p>
                           </div>
-                          <span className={`text-xs px-2 py-1 rounded-full ${
-                            activity.severity === 'high' ? 'bg-red-100 text-red-800' :
-                            activity.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-green-100 text-green-800'
-                          }`}>
+                          <span className={`text-xs px-2 py-1 rounded-full ${activity.severity === 'high' ? 'bg-red-100 text-red-800' :
+                              activity.severity === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-green-100 text-green-800'
+                            }`}>
                             {activity.type.replace('_', ' ')}
                           </span>
                         </div>
@@ -1402,7 +1395,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
               <Activity className="h-5 w-5 mr-2 text-indigo-600" />
               Real-Time Exam Monitoring Dashboard
             </h2>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Live Exam Sessions */}
               <div className="bg-gradient-to-br from-purple-50 to-blue-50 p-4 rounded-lg border border-purple-200">
@@ -1488,14 +1481,14 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                   <div className="flex justify-between text-sm">
                     <span className="text-yellow-700">Started Today:</span>
                     <span className="font-medium">
-                      {students.filter(s => s.examStartTime && 
+                      {students.filter(s => s.examStartTime &&
                         s.examStartTime.toDateString() === new Date().toDateString()).length}
                     </span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-yellow-700">Completed Today:</span>
                     <span className="font-medium">
-                      {students.filter(s => s.examHistory.some(exam => 
+                      {students.filter(s => s.examHistory.some(exam =>
                         exam.examDate.toDateString() === new Date().toDateString())).length}
                     </span>
                   </div>
@@ -1506,7 +1499,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                         const examDurations = students
                           .filter(s => s.examStartTime && s.isInExam)
                           .map(s => Math.floor((Date.now() - s.examStartTime!.getTime()) / (1000 * 60)));
-                        return examDurations.length > 0 
+                        return examDurations.length > 0
                           ? `${Math.round(examDurations.reduce((a, b) => a + b, 0) / examDurations.length)}m`
                           : '0m';
                       })()}
@@ -1584,7 +1577,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                         connectionQuality: s.connectionQuality
                       }))
                     };
-                    
+
                     const dataStr = JSON.stringify(report, null, 2);
                     const dataBlob = new Blob([dataStr], { type: 'application/json' });
                     const url = URL.createObjectURL(dataBlob);
@@ -1635,7 +1628,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                 )}
               </div>
             </div>
-            
+
             {/* Recording Statistics */}
             {recordings.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
@@ -1671,7 +1664,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                 </div>
               </div>
             )}
-            
+
             {recordings.length === 0 ? (
               <div className="text-center py-8">
                 <Camera className="h-12 w-12 text-gray-400 mx-auto mb-3" />
@@ -1695,7 +1688,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                     By Student
                   </button>
                 </div>
-                
+
                 {/* Recordings Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {recordings.map((recording) => {
@@ -1718,7 +1711,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                             <div className="text-xs text-gray-500">Duration</div>
                           </div>
                         </div>
-                        
+
                         <div className="space-y-2 text-sm mb-4">
                           <div className="flex justify-between">
                             <span className="text-gray-600">Recorded:</span>
@@ -1731,7 +1724,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                           <div className="flex justify-between">
                             <span className="text-gray-600">File Size:</span>
                             <span className="font-medium">
-                              {recording.blob instanceof Blob 
+                              {recording.blob instanceof Blob
                                 ? `${(recording.blob.size / (1024 * 1024)).toFixed(2)} MB`
                                 : 'Unknown'
                               }
@@ -1742,7 +1735,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                             <span className="font-medium text-green-600">HD (720p)</span>
                           </div>
                         </div>
-                        
+
                         {/* Download Options */}
                         <div className="space-y-2 mb-4">
                           <div className="text-xs font-medium text-gray-600">Download Options:</div>
@@ -1765,7 +1758,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                             </button>
                           </div>
                         </div>
-                        
+
                         <div className="flex space-x-2">
                           <button
                             onClick={() => {
