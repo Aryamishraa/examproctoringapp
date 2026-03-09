@@ -1,60 +1,47 @@
-// index.js
+// index.js — SafeExaminers Backend (MySQL version)
 const express = require("express");
 const cors = require("cors");
-const mongoose = require("mongoose");
+const mysql = require("mysql2/promise");
 const bcrypt = require("bcryptjs");
 require("dotenv").config();
 
 const app = express();
 
 // -------------------------
-// MongoDB Connection
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected ✅"))
-  .catch(err => console.log("MongoDB connection error:", err));
+// MySQL Connection Pool
+const pool = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_NAME || "safeexaminers",
+  port: parseInt(process.env.DB_PORT || "3306"),
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
+// Test DB connection on startup
+(async () => {
+  try {
+    const conn = await pool.getConnection();
+    console.log("MySQL Connected ✅");
+    conn.release();
+  } catch (err) {
+    console.error("MySQL connection error:", err.message);
+  }
+})();
 
 // -------------------------
 // Middleware
 app.use(cors({
-  origin: "https://safeexam-backend-t1wh.onrender.com"
+  origin: "*"
 }));
 app.use(express.json());
 
 // -------------------------
-// Import Student model from frontend
-// Since backend is JS and frontend is TS, define the schema here
-const studentSchema = new mongoose.Schema({
-  enrollmentNo: { type: String, required: true, unique: true, trim: true, minlength: 6 },
-  name: { type: String, required: true, trim: true, minlength: 2 },
-  passwordHash: { type: String, required: true },
-  isOnline: { type: Boolean, default: false },
-  isCameraOn: { type: Boolean, default: false },
-  isMicOn: { type: Boolean, default: false },
-  isSpeaking: { type: Boolean, default: false },
-  isTabActive: { type: Boolean, default: true },
-  lastActivity: { type: Date, default: Date.now },
-  examStartTime: { type: Date, default: null },
-  warnings: { type: Number, default: 0 },
-  currentTab: { type: String, default: '' },
-  connectionQuality: { type: String, enum: ['excellent', 'good', 'poor', 'disconnected'], default: 'disconnected' },
-  loginTime: { type: Date, default: null },
-  isInExam: { type: Boolean, default: false },
-  totalExamsTaken: { type: Number, default: 0 },
-  averageScore: { type: Number, default: 0 },
-  lastExamDate: { type: Date, default: null },
-  lastExamScore: { type: Number, default: null },
-  totalTimeSpent: { type: Number, default: 0 },
-  activityCount: { type: Number, default: 0 },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now }
-});
-
-const Student = mongoose.model("Student", studentSchema);
-
-// -------------------------
 // Root route
 app.get("/", (req, res) => {
-  res.send("Backend Running ✅");
+  res.send("Backend Running ✅ (MySQL)");
 });
 
 // -------------------------
@@ -68,32 +55,42 @@ app.post("/login", async (req, res) => {
     }
 
     // Find student by enrollmentNo
-    const student = await Student.findOne({ enrollmentNo });
-    if (!student) {
+    const [rows] = await pool.query(
+      "SELECT * FROM students WHERE enrollment_no = ?",
+      [enrollmentNo]
+    );
+
+    if (rows.length === 0) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
+
+    const student = rows[0];
 
     // Check if name matches
     if (student.name !== name) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // compare provided password with hash
-    const isMatch = await bcrypt.compare(password, student.passwordHash);
+    // Compare provided password with hash
+    const isMatch = await bcrypt.compare(password, student.password_hash);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
     // Update online status
-    student.isOnline = true;
-    student.loginTime = new Date();
-    student.lastActivity = new Date();
-    await student.save();
+    await pool.query(
+      "UPDATE students SET is_online = TRUE, login_time = NOW(), last_activity = NOW() WHERE id = ?",
+      [student.id]
+    );
 
     // Success - return student info
     res.status(200).json({
       message: "Login Success ✅",
-      student: { _id: student._id, enrollmentNo: student.enrollmentNo, name: student.name }
+      student: {
+        _id: student.id,
+        enrollmentNo: student.enrollment_no,
+        name: student.name,
+      },
     });
   } catch (error) {
     console.error("Login error:", error);
@@ -102,7 +99,7 @@ app.post("/login", async (req, res) => {
 });
 
 // -------------------------
-// Register Route (Optional - for admin/guide to add students)
+// Register Route
 app.post("/register", async (req, res) => {
   try {
     const { enrollmentNo, name, password } = req.body;
@@ -111,36 +108,30 @@ app.post("/register", async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    const existing = await Student.findOne({ enrollmentNo });
-    if (existing) return res.status(400).json({ message: "Student already exists" });
+    // Check if student exists
+    const [existing] = await pool.query(
+      "SELECT id FROM students WHERE enrollment_no = ?",
+      [enrollmentNo]
+    );
+    if (existing.length > 0) {
+      return res.status(400).json({ message: "Student already exists" });
+    }
 
-    // hash the password before saving
+    // Hash the password
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    const newStudent = await Student.create({ 
-      enrollmentNo, 
-      name, 
-      passwordHash,
-      isOnline: false,
-      isCameraOn: false,
-      isMicOn: false,
-      isSpeaking: false,
-      isTabActive: true,
-      lastActivity: new Date(),
-      warnings: 0,
-      currentTab: '',
-      connectionQuality: 'disconnected',
-      loginTime: null,
-      isInExam: false,
-      totalExamsTaken: 0,
-      averageScore: 0,
-      lastExamDate: null,
-      lastExamScore: null,
-      totalTimeSpent: 0,
-      activityCount: 0
+    // Insert new student
+    const [result] = await pool.query(
+      `INSERT INTO students (enrollment_no, name, password_hash, is_online, login_time, last_activity)
+       VALUES (?, ?, ?, FALSE, NULL, NOW())`,
+      [enrollmentNo, name, passwordHash]
+    );
+
+    res.status(201).json({
+      message: "Student created ✅",
+      studentId: result.insertId,
     });
-    res.status(201).json({ message: "Student created ✅", studentId: newStudent._id });
   } catch (err) {
     console.error("Register error:", err);
     res.status(500).json({ message: "Server error" });
@@ -148,21 +139,8 @@ app.post("/register", async (req, res) => {
 });
 
 // -------------------------
-// Start server AFTER MongoDB connects
-const startServer = () => {
-  const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-};
-
-// Connect and then start
-mongoose.connection.on('connected', () => {
-  console.log('MongoDB connected, starting server...');
-  startServer();
-});
-
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB connection failed:', err);
-  process.exit(1);
+// Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });

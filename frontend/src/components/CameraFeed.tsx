@@ -98,6 +98,9 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ user, onCameraStatusChange }) =
       const canvas = document.createElement('canvas');
       const detector: any = ('FaceDetector' in window) ? new (window as any).FaceDetector() : null;
 
+      let consecutiveMisses = 0;
+      let consecutiveHits = 0;
+
       const checkFrame = async () => {
         if (!videoRef.current) return;
         const video = videoRef.current;
@@ -107,28 +110,42 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ user, onCameraStatusChange }) =
         if (!ctx) return;
         ctx.drawImage(video, 0, 0);
 
-        let newStatus = false;
+        let faceFound = false;
         if (detector) {
           try {
             const faces = await detector.detect(canvas);
-            newStatus = faces.length > 0;
+            faceFound = faces.length > 0;
           } catch {
-            newStatus = Math.random() > 0.1;
+            faceFound = false; // Fallback to false so detection accurately fails if face cannot be found
           }
         } else {
-          newStatus = Math.random() > 0.1;
+          faceFound = false; // Fallback to false if API not supported
         }
 
-        setFaceDetected(prev => {
-          if (prev !== newStatus && user?.studentId) {
-            if (!newStatus) {
+        if (!faceFound) {
+          consecutiveMisses++;
+          consecutiveHits = 0;
+        } else {
+          consecutiveHits++;
+          consecutiveMisses = 0;
+        }
+
+        // Debounce face detection to prevent rapid fluctuating statuses
+        if (consecutiveMisses >= 5) {
+          setFaceDetected(prev => {
+            if (prev && user?.studentId) {
               studentMonitoringService.recordActivity(
                 user.studentId,
                 'student_not_visible',
                 'Student not visible in camera',
                 'high'
               );
-            } else {
+            }
+            return false;
+          });
+        } else if (consecutiveHits >= 3) {
+          setFaceDetected(prev => {
+            if (!prev && user?.studentId) {
               studentMonitoringService.recordActivity(
                 user.studentId,
                 'camera_on',
@@ -136,12 +153,12 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ user, onCameraStatusChange }) =
                 'low'
               );
             }
-          }
-          return newStatus;
-        });
+            return true;
+          });
+        }
       };
 
-      interval = window.setInterval(checkFrame, 300); // check every 300ms
+      interval = window.setInterval(checkFrame, 400); // slightly slower check to save CPU and aid debounce
 
       return () => clearInterval(interval);
     }

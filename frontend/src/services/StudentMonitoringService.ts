@@ -88,7 +88,8 @@ class StudentMonitoringService {
     try {
       const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
       if ((hostname === 'localhost' || hostname === '127.0.0.1') && this.students.size === 0) {
-        this.seedDemoStudents();
+        // Database is now integrated. Do not seed hardcoded demo students.
+        // this.seedDemoStudents();
       }
     } catch (err) {
       // ignore in non-browser environments
@@ -395,15 +396,15 @@ class StudentMonitoringService {
   }
 
   private updateTabActivity(isVisible: boolean) {
-    // Simulate tab switching for demo purposes
-    if (!isVisible) {
-      // record for every online student rather than hardcoded id
-      this.students.forEach((student, studentId) => {
-        if (student.isOnline) {
+    // Only fire warnings for online students taking an exam
+    this.students.forEach((student, studentId) => {
+      if (student.isOnline && student.isInExam && student.isTabActive === isVisible) {
+        student.isTabActive = isVisible;
+        if (!isVisible) {
           this.recordActivity(studentId, 'tab_switch', 'Student switched to another tab', 'medium');
         }
-      });
-    }
+      }
+    });
   }
 
   private simulateStudentActivities() {
@@ -411,41 +412,9 @@ class StudentMonitoringService {
       // Only simulate activities for students who are online
       if (!student.isOnline) return;
 
-      const random = Math.random();
+      // Removed random simulation (tab switching, camera off, speaking) 
+      // so warnings only trigger on actual events.
       
-      if (random > 0.95) {
-        // 5% chance of camera turning off
-        if (student.isCameraOn) {
-          student.isCameraOn = false;
-          this.recordActivity(studentId, 'camera_off', 'Camera turned off', 'high');
-        }
-      } else if (random > 0.9) {
-        // 5% chance of camera turning on
-        if (!student.isCameraOn && student.isOnline) {
-          student.isCameraOn = true;
-          this.recordActivity(studentId, 'camera_on', 'Camera turned on', 'low');
-        }
-      }
-
-      if (random > 0.85) {
-        // 15% chance of speaking
-        student.isSpeaking = !student.isSpeaking;
-        this.recordActivity(
-          studentId, 
-          student.isSpeaking ? 'speaking' : 'silent',
-          student.isSpeaking ? 'Student started speaking' : 'Student stopped speaking',
-          'low'
-        );
-      }
-
-      if (random > 0.8) {
-        // 20% chance of tab switching
-        student.isTabActive = !student.isTabActive;
-        if (!student.isTabActive) {
-          this.recordActivity(studentId, 'tab_switch', 'Student switched to another tab', 'medium');
-        }
-      }
-
       // Update last activity
       student.lastActivity = new Date();
     });

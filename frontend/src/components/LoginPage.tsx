@@ -4,7 +4,7 @@ import { User as UserType } from '../App';
 import { studentMonitoringService } from '../services/StudentMonitoringService';
 
 // during development use local backend, adjust as needed
-const BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface LoginPageProps {
   onLogin: (user: UserType) => void;
