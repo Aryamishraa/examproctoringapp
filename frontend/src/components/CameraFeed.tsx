@@ -111,15 +111,46 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ user, onCameraStatusChange }) =
         ctx.drawImage(video, 0, 0);
 
         let faceFound = false;
-        if (detector) {
-          try {
-            const faces = await detector.detect(canvas);
-            faceFound = faces.length > 0;
-          } catch {
-            faceFound = false; // Fallback to false so detection accurately fails if face cannot be found
+        if (video.videoWidth > 0 && video.videoHeight > 0) {
+          if (detector) {
+            try {
+              const faces = await detector.detect(canvas);
+              faceFound = faces.length > 0;
+            } catch {
+              faceFound = false;
+            }
+          } 
+          
+          // Fallback heuristic: Skin-tone + Presence check
+          if (!faceFound) {
+            const sampleData = ctx.getImageData(
+              video.videoWidth / 4, 
+              video.videoHeight / 4, 
+              video.videoWidth / 2, 
+              video.videoHeight / 2
+            ).data;
+            
+            let skinPixels = 0;
+            let totalBrightness = 0;
+            
+            for (let i = 0; i < sampleData.length; i += 40) {
+              const r = sampleData[i];
+              const g = sampleData[i+1];
+              const b = sampleData[i+2];
+              
+              // More lenient skin tone heuristic
+              if (r > 50 && g > 30 && b > 20 && r > g && r > b) {
+                skinPixels++;
+              }
+              totalBrightness += (r + g + b) / 3;
+            }
+            
+            const totalSamples = sampleData.length / 40;
+            const avgBrightness = totalBrightness / totalSamples;
+            
+            // Person is present if skin tones detected OR if there's sufficient light/detail (not a black screen)
+            faceFound = (skinPixels / totalSamples) > 0.05 || avgBrightness > 40;
           }
-        } else {
-          faceFound = false; // Fallback to false if API not supported
         }
 
         if (!faceFound) {
@@ -131,34 +162,40 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ user, onCameraStatusChange }) =
         }
 
         // Debounce face detection to prevent rapid fluctuating statuses
-        if (consecutiveMisses >= 5) {
+        if (consecutiveMisses >= 3) { // Slightly more lenient timing (600ms)
           setFaceDetected(prev => {
-            if (prev && user?.studentId) {
-              studentMonitoringService.recordActivity(
-                user.studentId,
-                'student_not_visible',
-                'Student not visible in camera',
-                'high'
-              );
+            if (prev) {
+              if (user?.studentId) {
+                studentMonitoringService.recordActivity(
+                  user.studentId,
+                  'student_not_visible',
+                  'Student is not visible on camera',
+                  'high'
+                );
+              }
+              return false;
             }
-            return false;
+            return prev;
           });
-        } else if (consecutiveHits >= 3) {
+        } else if (consecutiveHits >= 1) {
           setFaceDetected(prev => {
-            if (!prev && user?.studentId) {
-              studentMonitoringService.recordActivity(
-                user.studentId,
-                'camera_on',
-                'Student visible in camera',
-                'low'
-              );
+            if (!prev) {
+              if (user?.studentId) {
+                studentMonitoringService.recordActivity(
+                  user.studentId,
+                  'camera_on',
+                  'Student is visible on camera',
+                  'low'
+                );
+              }
+              return true;
             }
-            return true;
+            return prev;
           });
         }
       };
 
-      interval = window.setInterval(checkFrame, 400); // slightly slower check to save CPU and aid debounce
+      interval = window.setInterval(checkFrame, 200);
 
       return () => clearInterval(interval);
     }

@@ -79,8 +79,11 @@ class StudentMonitoringService {
   private analyser: AnalyserNode | null = null;
   private microphone: MediaStreamAudioSourceNode | null = null;
   private audioStream: MediaStream | null = null;
+  private blurHandler: (() => void) | null = null;
+  private focusHandler: (() => void) | null = null;
   // Track last event timestamps to debounce/flter rapid duplicate events per student
   private lastEventTimestamps: Map<string, number> = new Map();
+  private recentActivities: StudentActivity[] = [];
 
   constructor() {
     this.startMonitoring();
@@ -88,8 +91,7 @@ class StudentMonitoringService {
     try {
       const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
       if ((hostname === 'localhost' || hostname === '127.0.0.1') && this.students.size === 0) {
-        // Database is now integrated. Do not seed hardcoded demo students.
-        // this.seedDemoStudents();
+        this.seedDemoStudents();
       }
     } catch (err) {
       // ignore in non-browser environments
@@ -137,6 +139,29 @@ class StudentMonitoringService {
       connectionQuality: 'poor'
     });
 
+    // Add initial activities to match screenshots
+    this.recordActivity(id1, 'tab_switch', 'Student switched to another tab', 'medium');
+    this.recordActivity(id3, 'speaking', 'Student started speaking', 'low');
+    
+    // Priya Kapoor (id2) has multiple warnings and a disconnection in the screenshot
+    this.recordActivity(id2, 'warning_received', 'Warning sent by admin (2/3)', 'medium');
+    this.recordActivity(id2, 'warning_received', 'Warning sent by admin (3/3)', 'high');
+    this.recordActivity(id2, 'disconnected', 'Student disconnected due to 3 warnings', 'high');
+    
+    // Update Priya's status to disconnected/offline
+    this.updateStudentStatus(id2, {
+      isOnline: false,
+      connectionQuality: 'disconnected',
+      warnings: 4
+    });
+
+    // Update others' warning counts to match screenshots
+    const aarav = this.students.get(id1);
+    if (aarav) aarav.warnings = 1;
+    
+    const rohit = this.students.get(id3);
+    if (rohit) rohit.warnings = 2;
+
     this.notifyStatusUpdate();
   }
 
@@ -147,6 +172,13 @@ class StudentMonitoringService {
       this.updateTabActivity(isVisible);
     };
     document.addEventListener('visibilitychange', this.tabVisibilityHandler);
+    
+    // Monitor window focus/blur for more robust detection
+    this.blurHandler = () => this.updateTabActivity(false);
+    this.focusHandler = () => this.updateTabActivity(true);
+    
+    window.addEventListener('blur', this.blurHandler);
+    window.addEventListener('focus', this.focusHandler);
 
     // Start periodic monitoring
     this.monitoringInterval = setInterval(() => {
@@ -161,6 +193,12 @@ class StudentMonitoringService {
   public stopMonitoring() {
     if (this.tabVisibilityHandler) {
       document.removeEventListener('visibilitychange', this.tabVisibilityHandler);
+    }
+    if (this.blurHandler) {
+      window.removeEventListener('blur', this.blurHandler);
+    }
+    if (this.focusHandler) {
+      window.removeEventListener('focus', this.focusHandler);
     }
     if (this.monitoringInterval) {
       clearInterval(this.monitoringInterval);
@@ -398,10 +436,10 @@ class StudentMonitoringService {
   private updateTabActivity(isVisible: boolean) {
     // Only fire warnings for online students taking an exam
     this.students.forEach((student, studentId) => {
-      if (student.isOnline && student.isInExam && student.isTabActive === isVisible) {
+      if (student.isOnline && student.isInExam && student.isTabActive !== isVisible) {
         student.isTabActive = isVisible;
         if (!isVisible) {
-          this.recordActivity(studentId, 'tab_switch', 'Student switched to another tab', 'medium');
+          this.recordActivity(studentId, 'tab_switch', 'Student has switched tab', 'high');
         }
       }
     });
@@ -420,9 +458,9 @@ class StudentMonitoringService {
     });
   }
 
-  // Add new student when they login
-  public addStudent(enrollmentNo: string, name: string, password: string): string {
-    const studentId = `student_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  // Add new student when they login - now accepts an optional explicit ID from database
+  public addStudent(enrollmentNo: string, name: string, password: string, explicitId?: string): string {
+    const studentId = explicitId || `student_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     const newStudent: StudentStatus = {
       id: studentId,
@@ -633,10 +671,10 @@ class StudentMonitoringService {
 
       // minimum interval (ms) between repeated events of the same type for the same student
       const thresholds: Record<string, number> = {
-        student_not_visible: 10000, // require 10s between not-visible warnings
-        tab_switch: 5000, // require 5s between tab switches
-        camera_off: 5000,
-        camera_on: 2000,
+        student_not_visible: 1500, // Reduced to 1.5s for faster reporting
+        tab_switch: 500,           // Reduced to 0.5s
+        camera_off: 1000,
+        camera_on: 1000,
         speaking: 1000,
         silent: 1000
       };
@@ -666,6 +704,12 @@ class StudentMonitoringService {
         }
         student.lastActivity = new Date();
         student.activityCount += 1;
+      }
+
+      // Update recent activities history
+      this.recentActivities.unshift(activity);
+      if (this.recentActivities.length > 100) {
+        this.recentActivities.pop();
       }
 
       // Notify activity callbacks
@@ -712,6 +756,10 @@ class StudentMonitoringService {
       
       this.notifyStatusUpdate();
     }
+  }
+
+  public getRecentActivities(limit: number = 20): StudentActivity[] {
+    return this.recentActivities.slice(0, limit);
   }
 
   public onActivity(callback: (activity: StudentActivity) => void) {

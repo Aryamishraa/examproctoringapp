@@ -35,6 +35,13 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
 
   // Subscribe to monitoring service updates
   useEffect(() => {
+    // Load initial data
+    const initialStatuses = studentMonitoringService.getAllStudentStatuses();
+    setStudents(initialStatuses);
+    
+    const initialActivities = studentMonitoringService.getRecentActivities(20);
+    setRecentActivities(initialActivities);
+
     const unsubscribeStatus = studentMonitoringService.onStatusUpdate((statuses) => {
       setStudents(statuses);
       

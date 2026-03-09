@@ -19,7 +19,6 @@ const ExamPage: React.FC<ExamPageProps> = ({ user, onSubmitExam, onLogout }) => 
   const [answers, setAnswers] = useState<{ [key: number]: string }>({});
   const [questionStatuses, setQuestionStatuses] = useState<{ [key: number]: QuestionStatus }>({});
   const [timeRemaining, setTimeRemaining] = useState(3 * 60 * 60); // 3 hours in seconds
-  const [showCamera, setShowCamera] = useState(true);
   const [isCameraOn, setIsCameraOn] = useState(true);
   const [examStartTime] = useState(Date.now());
   const [isSaving, setIsSaving] = useState(false);
@@ -45,15 +44,29 @@ const ExamPage: React.FC<ExamPageProps> = ({ user, onSubmitExam, onLogout }) => 
     // Subscribe to exam warnings/activities
     const unsubscribe = studentMonitoringService.onActivity((activity) => {
       // Track monitoring and warning activities
-      const monitoringActivityTypes = ['warning_received', 'camera_off', 'camera_on', 'mic_off', 'mic_on', 'tab_switch', 'speaking', 'silent', 'disconnected', 'student_not_visible'];
+      const monitoringActivityTypes = ['warning_received', 'camera_off', 'camera_on', 'tab_switch', 'speaking', 'silent', 'disconnected', 'student_not_visible'];
+      
       if (user.studentId && activity.studentId === user.studentId && monitoringActivityTypes.includes(activity.type)) {
         setExamWarnings(prev => {
-          // Prevent duplicate warnings by checking if one with same timestamp already exists
-          const isDuplicate = prev.some(w => Math.abs(w.timestamp.getTime() - activity.timestamp.getTime()) < 100);
-          if (isDuplicate) {
-            return prev;
+          // Optimization: If it's a 'camera_on' or 'student_not_visible' event,
+          // we might want to replace the old one for a more dynamic feel
+          const isFaceRelated = ['camera_on', 'student_not_visible'].includes(activity.type);
+          
+          let filtered = prev;
+          if (isFaceRelated) {
+            // Remove previous face-related statuses to keep the panel clean and dynamic
+            filtered = prev.filter(w => !['camera_on', 'student_not_visible'].includes(w.type));
+          } else if (activity.type === 'tab_switch') {
+             // Keep tab switches as logs, but avoid immediate duplicates
+             const isDuplicate = prev.some(w => w.type === 'tab_switch' && Math.abs(w.timestamp.getTime() - activity.timestamp.getTime()) < 2000);
+             if (isDuplicate) return prev;
           }
-          return [activity, ...prev];
+
+          // Avoid micro-duplicates for all types
+          const isMicroDuplicate = filtered.some(w => w.type === activity.type && Math.abs(w.timestamp.getTime() - activity.timestamp.getTime()) < 100);
+          if (isMicroDuplicate) return prev;
+
+          return [activity, ...filtered].slice(0, 10); // Keep last 10 for performance
         });
       }
     });
@@ -450,12 +463,10 @@ const ExamPage: React.FC<ExamPageProps> = ({ user, onSubmitExam, onLogout }) => 
           {/* Sidebar */}
           <div className="space-y-6">
             {/* Camera Feed */}
-            {showCamera && (
-              <div className="bg-white rounded-xl shadow-lg p-4">
+            <div className="bg-white rounded-xl shadow-lg p-4">
                 <h3 className="text-sm font-medium text-gray-900 mb-3">Camera Monitoring</h3>
                 <CameraFeed user={user} onCameraStatusChange={handleCameraStatusChange} />
               </div>
-            )}
 
             {/* Progress Summary */}
             <div className="bg-white rounded-xl shadow-lg p-4">
