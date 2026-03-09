@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Users, Mic, MicOff, Camera, CameraOff, Download, AlertTriangle, Eye, EyeOff, Volume2, VolumeX, Bell, Wifi, WifiOff, Clock, UserCheck, Headphones, X, BookOpen, Trophy, Activity, TrendingUp, Image } from 'lucide-react';
+import { Users, Mic, MicOff, Camera, CameraOff, Download, AlertTriangle, Eye, Volume2, VolumeX, Bell, Wifi, WifiOff, Clock, UserCheck, Headphones, X, BookOpen, Trophy, Activity, TrendingUp, Image } from 'lucide-react';
 import { studentMonitoringService, StudentStatus, StudentActivity, StudentSnapshot } from '../services/StudentMonitoringService';
 
 interface AdminPageProps {
@@ -153,6 +153,13 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
 
   useEffect(() => {
     requestNotificationPermission();
+
+    // Final cleanup on unmount
+    return () => {
+      stopRecording();
+      stopListeningToStudent();
+      stopAudioMonitoring();
+    };
   }, []);
 
   // Audio monitoring setup
@@ -361,7 +368,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
     }
   };
 
-  const downloadRecording = (recordingId: string, quality: 'original' | 'compressed' = 'original') => {
+  const downloadRecording = (recordingId: string) => {
     // First try to find in current recordings state
     let recording = recordings.find(r => r.id === recordingId);
     
@@ -1749,7 +1756,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                               <span>Original</span>
                             </button>
                             <button
-                              onClick={() => downloadRecording(recording.id, 'compressed')}
+                              onClick={() => downloadRecording(recording.id)}
                               className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs transition duration-200 flex items-center justify-center space-x-1"
                               title="Download compressed version"
                             >

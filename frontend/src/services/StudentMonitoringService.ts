@@ -93,7 +93,7 @@ class StudentMonitoringService {
       if ((hostname === 'localhost' || hostname === '127.0.0.1') && this.students.size === 0) {
         this.seedDemoStudents();
       }
-    } catch (err) {
+    } catch {
       // ignore in non-browser environments
     }
   }
@@ -338,7 +338,7 @@ class StudentMonitoringService {
           if (!ctx) return false;
           try {
             ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-          } catch (err) {
+          } catch {
             return false;
           }
           const imageData = canvas.toDataURL('image/jpeg', 0.9);
@@ -377,7 +377,7 @@ class StudentMonitoringService {
         tempVideo.playsInline = true;
         try {
           await tempVideo.play().catch(() => {});
-        } catch (e) {
+        } catch {
           // ignore
         }
 
@@ -396,7 +396,7 @@ class StudentMonitoringService {
 
         try {
           ctx.drawImage(tempVideo, 0, 0, width, height);
-        } catch (err) {
+        } catch {
           return false;
         }
         const imageData = canvas.toDataURL('image/jpeg', 0.9);
@@ -446,7 +446,7 @@ class StudentMonitoringService {
   }
 
   private simulateStudentActivities() {
-    this.students.forEach((student, studentId) => {
+    this.students.forEach((student) => {
       // Only simulate activities for students who are online
       if (!student.isOnline) return;
 
@@ -459,7 +459,7 @@ class StudentMonitoringService {
   }
 
   // Add new student when they login - now accepts an optional explicit ID from database
-  public addStudent(enrollmentNo: string, name: string, password: string, explicitId?: string): string {
+  public addStudent(enrollmentNo: string, name: string, initialStatus: string = 'online', explicitId?: string): string {
     const studentId = explicitId || `student_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     const newStudent: StudentStatus = {
@@ -850,9 +850,9 @@ class StudentMonitoringService {
 
   // Get recent activities for a specific student
   public getStudentRecentActivities(studentId: string, limit: number = 10): StudentActivity[] {
-    // This would be implemented to return recent activities for a specific student
-    // For now, we'll return all activities and filter in the component
-    return [];
+    return this.recentActivities
+      .filter(activity => activity.studentId === studentId)
+      .slice(0, limit);
   }
 
   // Capture snapshot from student's camera
@@ -1023,15 +1023,15 @@ class StudentMonitoringService {
   public registerStudentVideoStream(studentId: string, stream: MediaStream) {
     const student = this.students.get(studentId);
     if (student) {
-      (student as any).videoStream = stream;
+      student.videoStream = stream;
     }
   }
 
   // Unregister the MediaStream reference (do not stop tracks here)
   public unregisterStudentVideoStream(studentId: string) {
     const student = this.students.get(studentId);
-    if (student && (student as any).videoStream) {
-      delete (student as any).videoStream;
+    if (student && student.videoStream) {
+      student.videoStream = undefined;
     }
   }
 
@@ -1039,15 +1039,15 @@ class StudentMonitoringService {
   public registerStudentVideoElement(studentId: string, videoEl: HTMLVideoElement) {
     const student = this.students.get(studentId);
     if (student) {
-      (student as any).videoElement = videoEl;
+      student.videoElement = videoEl;
     }
   }
 
   // Unregister the video element reference
   public unregisterStudentVideoElement(studentId: string) {
     const student = this.students.get(studentId);
-    if (student && (student as any).videoElement) {
-      delete (student as any).videoElement;
+    if (student && student.videoElement) {
+      student.videoElement = undefined;
     }
   }
 }
