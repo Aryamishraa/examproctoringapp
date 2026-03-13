@@ -1,7 +1,7 @@
 // init-db.js — Create all tables and seed sample data for SafeExaminers
-const mysql = require("mysql2/promise");
-const bcrypt = require("bcryptjs");
-require("dotenv").config();
+import mysql from "mysql2/promise";
+import bcrypt from "bcryptjs";
+import "dotenv/config";
 
 async function initDB() {
   const connection = await mysql.createConnection({
