@@ -77,6 +77,9 @@ function App() {
     if (user?.studentId) {
       import('./services/StudentMonitoringService').then(({ studentMonitoringService }) => {
         studentMonitoringService.updateStudentExamStatus(user.studentId!, true, new Date());
+        studentMonitoringService.startAudioMonitoring(user.studentId!).catch(err => {
+          console.warn('Audio monitoring failed for student', user.studentId, err);
+        });
       });
     }
   };

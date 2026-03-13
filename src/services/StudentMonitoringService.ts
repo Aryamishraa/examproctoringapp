@@ -496,12 +496,6 @@ class StudentMonitoringService {
     // Notify status update
     this.notifyStatusUpdate();
 
-    // Automatically start audio monitoring for this student so speaking events are captured
-    this.startAudioMonitoring(studentId).catch(err => {
-      // ignore any permission errors
-      console.warn('Audio monitoring failed for student', studentId, err);
-    });
-
     return studentId;
   }
 
