@@ -1,9 +1,14 @@
 // index.js — SafeExaminers Backend (MySQL version)
+import path from "path";
+import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
 import mysql from "mysql2/promise";
 import bcrypt from "bcryptjs";
 import "dotenv/config";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -37,6 +42,9 @@ app.use(cors({
   origin: "*"
 }));
 app.use(express.json());
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, "dist")));
 
 // -------------------------
 // Root route
