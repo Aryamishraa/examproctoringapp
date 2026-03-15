@@ -24,26 +24,30 @@ const app = express();
   }
 })();
 
-// -------------------------
 // Middleware
-// Middleware
-app.use(cors({
-  origin: "*"
-}));
+app.use(cors({ origin: "*" }));
 app.use(express.json());
+
+// Request logging for Hostinger debugging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
 
 // Serve static files from the React app
 app.use(express.static(path.join(__dirname, "dist")));
 
 // -------------------------
-// Root route
-app.get("/", (req, res) => {
-  res.send("Backend Running ✅ (MySQL)");
+// API Routes (Prefix with /api)
+// -------------------------
+
+// Health Check
+app.get("/api/health", (req, res) => {
+  res.json({ status: "online", database: "connected" });
 });
 
-// -------------------------
 // Login Route
-app.post("/login", async (req, res) => {
+app.post("/api/login", async (req, res) => {
   try {
     const { enrollmentNo, name, password } = req.body;
 
@@ -66,7 +70,7 @@ app.post("/login", async (req, res) => {
 
     const studentData = rows[0];
 
-    // Check if full_name matches (as per original logic, though usually username/email is enough)
+    // Check if full_name matches
     if (studentData.full_name !== name) {
       return res.status(401).json({ message: "Name does not match enrollment record" });
     }
@@ -98,9 +102,8 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// -------------------------
 // Register Route
-app.post("/register", async (req, res) => {
+app.post("/api/register", async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const { enrollmentNo, name, password, email } = req.body;
@@ -156,9 +159,8 @@ app.post("/register", async (req, res) => {
   }
 });
 
-// -------------------------
 // Proctoring Incident Route
-app.post("/proctoring/incident", async (req, res) => {
+app.post("/api/proctoring/incident", async (req, res) => {
   try {
     const { examId, type, severity, details, snapshotPath } = req.body;
 
@@ -182,9 +184,8 @@ app.post("/proctoring/incident", async (req, res) => {
   }
 });
 
-// -------------------------
 // Get Questions for an Assessment
-app.get("/assessments/:id/questions", async (req, res) => {
+app.get("/api/assessments/:id/questions", async (req, res) => {
   try {
     const assessmentId = req.params.id;
 
@@ -215,13 +216,11 @@ app.get("/assessments/:id/questions", async (req, res) => {
   }
 });
 
-// The "catchall" handler: for any request that doesn't
-// match one above, send back React's index.html file.
+// The "catchall" handler: serve React app
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
-// -------------------------
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
