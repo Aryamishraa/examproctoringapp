@@ -81,7 +81,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
       studentMonitoringService.addStudent(
         user.enrollmentNo,
         user.name,
-        formData.password,
         user.studentId
       );
 

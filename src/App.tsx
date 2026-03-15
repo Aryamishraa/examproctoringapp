@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import LoginPage from './components/LoginPage';
 import AdminLogin from './components/AdminLogin';
 import Dashboard from './components/Dashboard';
@@ -17,14 +17,26 @@ export interface User {
 }
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<PageType>('login');
-  const [user, setUser] = useState<User | null>(null);
-  const [examStarted, setExamStarted] = useState(false);
+  // Initialize state from localStorage if available
+  const [currentPage, setCurrentPage] = useState<PageType>(() => {
+    return (localStorage.getItem('currentPage') as PageType) || 'login';
+  });
+  const [user, setUser] = useState<User | null>(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
   const [examProgress, setExamProgress] = useState<ExamProgress | null>(null);
 
-  const navigateTo = (page: PageType) => {
-    setCurrentPage(page);
-  };
+  // Sync state to localStorage on changes
+  useEffect(() => {
+    localStorage.setItem('currentPage', currentPage);
+    if (user) {
+      localStorage.setItem('user', JSON.stringify(user));
+    } else {
+      localStorage.removeItem('user');
+    }
+  }, [currentPage, user]);
+
 
   const handleLogin = (userData: User) => {
     setUser(userData);
@@ -38,21 +50,22 @@ function App() {
   };
 
   const handleLogout = () => {
-    // Remove student from monitoring service if they have a studentId
+    // Comprehensive cleanup of monitoring and media tracks
+    import('./services/StudentMonitoringService').then(({ studentMonitoringService }) => {
+      studentMonitoringService.stopAllMonitoring();
+    });
+
     if (user?.studentId) {
-      // Import and use the monitoring service to remove the student
-      import('./services/StudentMonitoringService').then(({ studentMonitoringService }) => {
-        studentMonitoringService.removeStudent(user.studentId!);
-      });
-      
-      // Clear exam progress
+      // Clear exam progress in service
       examService.clearExamProgress(user.studentId);
     }
     
+    // Clear local state and storage
     setUser(null);
-    setExamStarted(false);
     setExamProgress(null);
     setCurrentPage('login');
+    localStorage.removeItem('user');
+    localStorage.removeItem('currentPage');
   };
 
   const switchToAdmin = () => {
@@ -70,7 +83,6 @@ function App() {
       setExamProgress(progress);
     }
     
-    setExamStarted(true);
     setCurrentPage('exam');
     
     // Update student exam status in monitoring service
@@ -104,17 +116,28 @@ function App() {
   };
 
   const renderCurrentPage = () => {
+    // Security Guard: Prevent non-admin from accessing admin page
+    if (currentPage === 'admin' && (!user || !user.isAdmin)) {
+      return <AdminLogin onLogin={handleLogin} onBackToStudent={switchToStudent} />;
+    }
+
+    // Security Guard: Prevent guest from accessing restricted student pages
+    const restrictedStudentPages: PageType[] = ['dashboard', 'exam', 'submitted'];
+    if (restrictedStudentPages.includes(currentPage) && !user) {
+      return <LoginPage onLogin={handleLogin} onSwitchToAdmin={switchToAdmin} />;
+    }
+
     switch (currentPage) {
       case 'login':
         return <LoginPage onLogin={handleLogin} onSwitchToAdmin={switchToAdmin} />;
       case 'admin-login':
         return <AdminLogin onLogin={handleLogin} onBackToStudent={switchToStudent} />;
       case 'dashboard':
-        return <Dashboard user={user!} onStartExam={startExam} onLogout={handleLogout} />;
+        return user ? <Dashboard user={user} onStartExam={startExam} onLogout={handleLogout} /> : null;
       case 'exam':
-        return <ExamPage user={user!} onSubmitExam={submitExam} onLogout={handleLogout} />;
+        return user ? <ExamPage user={user} onSubmitExam={submitExam} onLogout={handleLogout} /> : null;
       case 'submitted':
-        return <SubmittedPage user={user!} examProgress={examProgress} onLogout={handleLogout} />;
+        return user ? <SubmittedPage user={user} examProgress={examProgress} onLogout={handleLogout} /> : null;
       case 'admin':
         return <AdminPage onLogout={handleLogout} />;
       default:

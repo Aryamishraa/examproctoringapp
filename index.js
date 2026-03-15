@@ -3,9 +3,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 import express from "express";
 import cors from "cors";
-import mysql from "mysql2/promise";
 import bcrypt from "bcryptjs";
 import "dotenv/config";
+import pool from "./db.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,18 +13,6 @@ const __dirname = path.dirname(__filename);
 const app = express();
 
 // -------------------------
-// MySQL Connection Pool
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || "localhost",
-  user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "",
-  database: process.env.DB_NAME || "safeexaminers",
-  port: parseInt(process.env.DB_PORT || "3306"),
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-});
-
 // Test DB connection on startup
 (async () => {
   try {
@@ -37,6 +25,7 @@ const pool = mysql.createPool({
 })();
 
 // -------------------------
+// Middleware
 // Middleware
 app.use(cors({
   origin: "*"

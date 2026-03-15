@@ -236,78 +236,6 @@ class StudentMonitoringService {
     }
   }
 
-  // Generate a simulated snapshot (canvas) to represent student's webcam frame
-  private generateSimulatedSnapshot(studentId: string, studentName: string, enrollmentNo: string) {
-    try {
-      // Create canvas and draw a simple placeholder image with name and timestamp
-      const canvas = document.createElement('canvas');
-      const width = 640;
-      const height = 360;
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // Background
-      ctx.fillStyle = '#f3f4f6';
-      ctx.fillRect(0, 0, width, height);
-
-      // Header bar
-      ctx.fillStyle = '#111827';
-      ctx.fillRect(0, 0, width, 48);
-
-      // Student name
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '20px sans-serif';
-      ctx.fillText(`${studentName} (${enrollmentNo})`, 12, 32);
-
-      // Timestamp
-      const ts = new Date();
-      ctx.fillStyle = '#374151';
-      ctx.font = '16px sans-serif';
-      ctx.fillText(ts.toLocaleString(), 12, height - 12);
-
-      // Draw a simple avatar/placeholder
-      ctx.fillStyle = '#e5e7eb';
-      ctx.beginPath();
-      ctx.arc(width - 80, 80, 56, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#9ca3af';
-      ctx.font = '24px sans-serif';
-      ctx.fillText(studentName.split(' ')[0].charAt(0) || 'S', width - 92, 92);
-
-      const imageData = canvas.toDataURL('image/jpeg', 0.8);
-
-      const snapshot: StudentSnapshot = {
-        id: `snapshot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        studentId,
-        timestamp: ts,
-        imageData,
-        studentName,
-        enrollmentNo
-      };
-
-      if (!this.snapshots.has(studentId)) {
-        this.snapshots.set(studentId, []);
-      }
-      this.snapshots.get(studentId)!.push(snapshot);
-
-      // Persist to localStorage
-      try {
-        const stored = JSON.parse(localStorage.getItem('studentSnapshots') || '{}');
-        if (!stored[studentId]) stored[studentId] = [];
-        stored[studentId].push({ ...snapshot, timestamp: snapshot.timestamp.toISOString() });
-        localStorage.setItem('studentSnapshots', JSON.stringify(stored));
-      } catch (err) {
-        console.error('Error persisting simulated snapshot:', err);
-      }
-
-      // Notify listeners
-      this.notifySnapshotUpdate(studentId);
-    } catch (err) {
-      console.error('Error generating simulated snapshot:', err);
-    }
-  }
 
   // Attempt to capture a snapshot from a student's provided video element or MediaStream.
   // Returns true if a real capture was made, false otherwise.
@@ -459,7 +387,7 @@ class StudentMonitoringService {
   }
 
   // Add new student when they login - now accepts an optional explicit ID from database
-  public addStudent(enrollmentNo: string, name: string, initialStatus: string = 'online', explicitId?: string): string {
+  public addStudent(enrollmentNo: string, name: string, explicitId?: string): string {
     const studentId = explicitId || `student_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     const newStudent: StudentStatus = {
@@ -646,15 +574,37 @@ class StudentMonitoringService {
       this.microphone.disconnect();
     }
     if (this.audioContext) {
-      this.audioContext.close();
+      if (this.audioContext.state !== 'closed') {
+        this.audioContext.close().catch(console.error);
+      }
     }
     if (this.audioStream) {
-      this.audioStream.getTracks().forEach(track => track.stop());
+      this.audioStream.getTracks().forEach(track => {
+        track.stop();
+        track.enabled = false;
+      });
     }
     this.audioContext = null;
     this.analyser = null;
     this.microphone = null;
     this.audioStream = null;
+  }
+
+  /**
+   * Comprehensive cleanup for all monitoring activities and media streams.
+   * Call this on logout or when proctoring should fully stop.
+   */
+  public stopAllMonitoring() {
+    this.stopMonitoring();
+    this.stopAudioMonitoring();
+    this.stopAutoSnapshots();
+    
+    // Clear student statuses for a clean state on next login
+    this.students.clear();
+    this.snapshots.clear();
+    this.recentActivities = [];
+    
+    console.log('StudentMonitoringService: All proctoring and media tracks stopped.');
   }
 
   public recordActivity(studentId: string, type: StudentActivity['type'], details: string, severity: StudentActivity['severity'], metadata?: any) {

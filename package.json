@@ -9,10 +9,8 @@
     "start": "node index.js",
     "lint": "eslint .",
     "preview": "vite preview",
-    "db:init": "ts-node src/scripts/initDB.ts",
-    "db:reset": "ts-node src/scripts/initDB.ts",
-    "db:connect": "ts-node -e \"import('./src/config/database').then(db => db.connectDB())\"",
-    "db:test": "ts-node src/scripts/testConnection.ts"
+    "db:init": "node init-db.js",
+    "db:test": "node index.js --test"
   },
   "dependencies": {
     "@types/bcryptjs": "^2.4.6",
