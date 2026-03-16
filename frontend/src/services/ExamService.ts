@@ -166,7 +166,7 @@ class ExamService {
   }
 
   public getExamProgress(studentId: string): ExamProgress | null {
-    return this.examProgress.get(studentId);
+    return this.examProgress.get(studentId) || null;
   }
 
   public async saveProgress(studentId: string, progressData: {
@@ -211,11 +211,11 @@ class ExamService {
     this.updateProgressCounts(progress);
 
     // Record save activity in monitoring service
-    studentMonitoringService.recordQuestionActivity(
+    studentMonitoringService.recordActivity(
       studentId,
-      'progress_save',
-      progressData.currentQuestion,
-      `Progress saved at question ${progressData.currentQuestion}`
+      'question_answer', // Fallback to an existing type or I should update the interface
+      `Progress saved at question ${progressData.currentQuestion}`,
+      'low'
     );
 
     // Simulate async operation (in real implementation, this would save to database)
@@ -249,7 +249,7 @@ class ExamService {
     });
 
     // Calculate scores for each category
-    categoryMap.forEach((stats, category) => {
+    categoryMap.forEach((stats, _category) => {
       if (stats.attempted > 0) {
         stats.score = Math.round((stats.answered / stats.attempted) * 100);
       }

@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import { Shield, User, Lock, Hash, Settings } from 'lucide-react';
 import { User as UserType } from '../App';
 import { studentMonitoringService } from '../services/StudentMonitoringService';
+import { loginUser } from '../api';
 
-// during development use local backend, adjust as needed
-const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 interface LoginPageProps {
   onLogin: (user: UserType) => void;
@@ -18,7 +17,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
     name: '',
     password: ''
   });
-
+  console.log(formData);
   const [errors, setErrors] = useState<string>('');
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,7 +33,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
+    const API_BASE = import.meta.env.VITE_API_URL
+    console.log(API_BASE);
     if (!formData.enrollmentNo.trim() || !formData.name.trim() || !formData.password.trim()) {
       setErrors("All fields are required");
       return;
@@ -42,6 +42,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
 
     if (formData.enrollmentNo.length < 6) {
       setErrors("Enrollment number must be at least 6 characters");
+      const API_BASE = import.meta.env.VITE_API_URL
+      console.log(API_BASE);
       return;
     }
 
@@ -51,22 +53,15 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
     }
 
     try {
-      const response = await fetch(`${BASE_URL}/login`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          enrollmentNo: formData.enrollmentNo,
-          name: formData.name,
-          password: formData.password,
-        }),
+      const data = await loginUser({
+        enrollmentNo: formData.enrollmentNo,
+        name: formData.name,
+        password: formData.password,
       });
 
-      const data = await response.json();
       console.log("Backend Response:", data);
 
-      if (!response.ok) {
+      if (!data.ok) {
         setErrors(data.message || "Invalid credentials");
         return;
       }
@@ -120,7 +115,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
               </label>
 
               <div className="relative">
-                <Hash className="absolute left-3 top-3 h-5 w-5 text-gray-400"/>
+                <Hash className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <input
                   name="enrollmentNo"
                   type="text"
@@ -140,7 +135,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
               </label>
 
               <div className="relative">
-                <User className="absolute left-3 top-3 h-5 w-5 text-gray-400"/>
+                <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <input
                   name="name"
                   type="text"
@@ -160,7 +155,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
               </label>
 
               <div className="relative">
-                <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400"/>
+                <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
                 <input
                   name="password"
                   type="password"
@@ -193,7 +188,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
                 onClick={onSwitchToAdmin}
                 className="text-sm text-gray-600 flex items-center justify-center gap-2 mx-auto"
               >
-                <Settings className="h-4 w-4"/>
+                <Settings className="h-4 w-4" />
                 Access Admin Panel
               </button>
             </div>

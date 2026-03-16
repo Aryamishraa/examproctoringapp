@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Camera, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { studentMonitoringService } from '../services/StudentMonitoringService';
 import { User } from '../App';
 
@@ -14,7 +14,7 @@ const CameraFeed: React.FC<CameraFeedProps> = ({ user, onCameraStatusChange }) =
   const [isActive, setIsActive] = useState(false);
   const [error, setError] = useState<string>('');
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [lastVisibilityStatus, setLastVisibilityStatus] = useState(true);
+
 
   useEffect(() => {
     const startCamera = async () => {

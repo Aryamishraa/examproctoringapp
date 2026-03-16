@@ -72,8 +72,8 @@ class StudentMonitoringService {
   private activityCallbacks: ((activity: StudentActivity) => void)[] = [];
   private statusCallbacks: ((status: StudentStatus[]) => void)[] = [];
   private snapshotCallbacks: ((snapshots: StudentSnapshot[]) => void)[] = [];
-  private monitoringInterval: NodeJS.Timeout | null = null;
-  private snapshotInterval: NodeJS.Timeout | null = null;
+  private monitoringInterval: ReturnType<typeof setInterval> | null = null;
+  private snapshotInterval: ReturnType<typeof setInterval> | null = null;
   private tabVisibilityHandler: (() => void) | null = null;
   private audioContext: AudioContext | null = null;
   private analyser: AnalyserNode | null = null;
