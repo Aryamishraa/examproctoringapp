@@ -3,46 +3,59 @@ import pool from "../config/db.js";
 
 export const login = async (req, res) => {
   try {
-    const { enrollmentNo, name, password } = req.body;
+    const { username, enrollmentNo, password } = req.body;
+    const identifier = username || enrollmentNo;
 
-    if (!enrollmentNo || !name || !password) {
-      return res.status(400).json({ message: "All fields are required" });
+    if (!identifier || !password) {
+      return res.status(400).json({ message: "Username/Enrollment and password are required" });
     }
 
-    const [rows] = await pool.query(
-      `SELECT s.id as student_id, s.enrollment_no, u.full_name, u.password_hash, u.id as user_id 
-       FROM students s 
-       JOIN users u ON s.user_id = u.id 
-       WHERE s.enrollment_no = ?`,
-      [enrollmentNo]
+    // Find user in users table
+    const [userRows] = await pool.query(
+      "SELECT id, username, full_name, password_hash, role FROM users WHERE username = ?",
+      [identifier]
     );
 
-    if (rows.length === 0) {
-      return res.status(401).json({ message: "Invalid enrollment number" });
+    if (userRows.length === 0) {
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    const studentData = rows[0];
+    const userData = userRows[0];
 
-    if (studentData.full_name !== name) {
-      return res.status(401).json({ message: "Name does not match enrollment record" });
-    }
-
-    const isMatch = await bcrypt.compare(password, studentData.password_hash);
+    // Verify password
+    const isMatch = await bcrypt.compare(password, userData.password_hash);
     if (!isMatch) {
       return res.status(401).json({ message: "Invalid password" });
     }
 
-    await pool.query(
-      "UPDATE students SET is_online = TRUE, last_activity = NOW() WHERE id = ?",
-      [studentData.student_id]
-    );
+    let studentInfo = null;
+    if (userData.role === 'student') {
+      const [studentRows] = await pool.query(
+        "SELECT id FROM students WHERE user_id = ?",
+        [userData.id]
+      );
+      if (studentRows.length > 0) {
+        studentInfo = {
+          student_id: studentRows[0].id
+        };
+        
+        // Update online status for students
+        await pool.query(
+          "UPDATE students SET is_online = TRUE, last_activity = NOW() WHERE id = ?",
+          [studentRows[0].id]
+        );
+      }
+    }
 
     res.status(200).json({
       message: "Login Success ✅",
-      student: {
-        _id: studentData.student_id,
-        enrollmentNo: studentData.enrollment_no,
-        name: studentData.full_name,
+      user: {
+        id: userData.id,
+        username: userData.username,
+        name: userData.full_name,
+        role: userData.role,
+        isAdmin: userData.role === 'admin',
+        studentId: studentInfo?.student_id
       },
     });
   } catch (error) {

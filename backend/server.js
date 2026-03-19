@@ -42,12 +42,59 @@ app.use((req, res, next) => {
 // -------------------------
 
 // Health Check
-app.get("/api/health", (req, res) => {
-  res.json({ status: "online", database: "connected" });
+app.get("/api/health", async (req, res) => {
+  try {
+    const [result] = await pool.query("SELECT 1 as status");
+    res.json({ 
+      status: "online", 
+      database: result[0].status === 1 ? "connected" : "error",
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      status: "online", 
+      database: "disconnected", 
+      error: err.message 
+    });
+  }
 });
 
 // Authentication Routes
 app.use("/api", authRoutes);
+
+// Admin Statistics
+app.get("/api/admin/stats", async (req, res) => {
+  try {
+    const [studentCount] = await pool.query("SELECT COUNT(*) as count FROM students");
+    const [examCount] = await pool.query("SELECT COUNT(*) as count FROM student_assessments");
+    const [avgScore] = await pool.query("SELECT AVG(score) as avg FROM student_assessments WHERE status = 'completed'");
+    
+    res.json({
+      totalStudents: studentCount[0].count,
+      totalExams: examCount[0].count,
+      averageScore: Math.round(avgScore[0].avg || 0)
+    });
+  } catch (err) {
+    console.error("Admin stats error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Get all students
+app.get("/api/admin/students", async (req, res) => {
+  try {
+    const [students] = await pool.query(`
+      SELECT u.id, u.username, u.full_name as name, s.enrollment_no
+      FROM users u
+      JOIN students s ON u.id = s.user_id
+      WHERE u.role = 'student'
+    `);
+    res.json(students);
+  } catch (err) {
+    console.error("Fetch students error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 // Proctoring Incident Route
 app.post("/api/proctoring/incident", async (req, res) => {

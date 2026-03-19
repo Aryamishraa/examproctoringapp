@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { Shield, User, Lock } from 'lucide-react';
+import { loginUser } from '../api';
 
 interface AdminLoginProps {
   onLogin: (user: { enrollmentNo: string; name: string; isAdmin: boolean }) => void;
   onBackToStudent: () => void;
 }
 
-const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBackToStudent }) => {
+const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBackToStudent }: AdminLoginProps) => {
   const [formData, setFormData] = useState({
     username: '',
     password: ''
@@ -15,14 +16,14 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBackToStudent }) => 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev: typeof formData) => ({
       ...prev,
       [name]: value
     }));
     setErrors('');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.username.trim() || !formData.password.trim()) {
@@ -30,18 +31,33 @@ const AdminLogin: React.FC<AdminLoginProps> = ({ onLogin, onBackToStudent }) => 
       return;
     }
 
-    // Simple admin authentication (in production, this would be server-side)
-    const username = formData.username.trim().toLowerCase();
-    const password = formData.password.trim();
+    try {
+      const data = await loginUser({
+        username: formData.username.trim(),
+        password: formData.password.trim(),
+      });
 
-    if (username === 'admin' && password === 'admin123456') {
+      console.log("Admin Login Response:", data);
+
+      if (!data.ok) {
+        setErrors(data.message || "Invalid admin credentials");
+        return;
+      }
+
+      if (!data.user.isAdmin) {
+        setErrors("Access denied: Not an administrator");
+        return;
+      }
+
       onLogin({
-        enrollmentNo: 'admin',
-        name: 'Administrator',
+        enrollmentNo: data.user.username,
+        name: data.user.name,
         isAdmin: true
       });
-    } else {
-      setErrors('Invalid admin credentials');
+
+    } catch (error) {
+      console.error("Admin login error:", error);
+      setErrors("Server connection failed");
     }
   };
 

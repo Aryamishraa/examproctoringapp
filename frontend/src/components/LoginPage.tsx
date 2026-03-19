@@ -10,7 +10,7 @@ interface LoginPageProps {
   onSwitchToAdmin: () => void;
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }: LoginPageProps) => {
 
   const [formData, setFormData] = useState({
     enrollmentNo: '',
@@ -68,16 +68,19 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToAdmin }) => {
 
       // Use backend returned data instead of manual name
       const user: UserType = {
-        enrollmentNo: data.student.enrollmentNo,
-        name: data.student.name,
-        studentId: data.student._id,
+        enrollmentNo: data.user.username,
+        name: data.user.name,
+        isAdmin: data.user.isAdmin,
+        studentId: data.user.studentId,
       };
 
-      studentMonitoringService.addStudent(
-        user.enrollmentNo,
-        user.name,
-        user.studentId
-      );
+      if (user.studentId) {
+        studentMonitoringService.addStudent(
+          user.enrollmentNo,
+          user.name,
+          user.studentId
+        );
+      }
 
       onLogin(user);
 

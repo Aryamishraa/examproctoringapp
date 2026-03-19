@@ -18,3 +18,15 @@ export const loginUser = async (data: any): Promise<any> => {
   const responseData = await response.json();
   return { ok: response.ok, ...responseData };
 };
+
+export const getAdminStats = async (): Promise<any> => {
+  const response = await fetch(`${API_BASE}/admin/stats`);
+  const data = await response.json();
+  return { ok: response.ok, ...data };
+};
+
+export const fetchAllAdminStudents = async (): Promise<any> => {
+  const response = await fetch(`${API_BASE}/admin/students`);
+  const data = await response.json();
+  return { ok: response.ok, data };
+};

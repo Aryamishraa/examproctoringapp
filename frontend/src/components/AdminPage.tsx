@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Users, Mic, MicOff, Camera, CameraOff, Download, AlertTriangle, Eye, Volume2, VolumeX, Bell, Wifi, WifiOff, Clock, UserCheck, Headphones, X, BookOpen, Trophy, Activity, TrendingUp, Image } from 'lucide-react';
 import { studentMonitoringService, StudentStatus, StudentActivity, StudentSnapshot } from '../services/StudentMonitoringService';
+import { getAdminStats, fetchAllAdminStudents } from '../api';
 
 interface AdminPageProps {
   onLogout: () => void;
@@ -27,6 +28,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
   const [showNotifications, setShowNotifications] = useState(true);
   const [lastStudentAppeared, setLastStudentAppeared] = useState<StudentStatus | null>(null);
   const [selectedStudentActivities, setSelectedStudentActivities] = useState<StudentActivity[]>([]);
+  const [dbStats, setDbStats] = useState({ totalStudents: 0, totalExams: 0, averageScore: 0 });
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingStartTime = useRef<number>(0);
@@ -150,6 +152,45 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
       }
     }
   };
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const stats = await getAdminStats();
+        if (stats.ok) {
+          setDbStats({
+            totalStudents: stats.totalStudents,
+            totalExams: stats.totalExams,
+            averageScore: stats.averageScore
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch admin stats:", err);
+      }
+    };
+
+    const fetchStudents = async () => {
+      try {
+        const result = await fetchAllAdminStudents();
+        if (result.ok && result.data) {
+          studentMonitoringService.syncWithDatabase(result.data);
+          setStudents(studentMonitoringService.getAllStudentStatuses());
+        }
+      } catch (err) {
+        console.error("Failed to fetch students from DB:", err);
+      }
+    };
+
+    fetchStats();
+    fetchStudents();
+
+    // Refresh data every 30 seconds
+    const interval = setInterval(() => {
+      fetchStats();
+      fetchStudents();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     requestNotificationPermission();
@@ -509,12 +550,9 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
   };
 
   // Calculate statistics
-  const totalStudents = students.length;
   const studentsInExam = students.filter(s => s.isInExam).length;
   const studentsOnline = students.filter(s => s.isOnline).length;
   const studentsWithWarnings = students.filter(s => s.warnings > 0).length;
-  const totalExamsTaken = students.reduce((sum, s) => sum + s.totalExamsTaken, 0);
-  const averageScore = students.length > 0 ? students.reduce((sum, s) => sum + s.averageScore, 0) / students.length : 0;
 
   // Format time
   const formatTime = (seconds: number): string => {
@@ -661,7 +699,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Students</p>
-                <p className="text-2xl font-bold text-gray-900">{totalStudents}</p>
+                <p className="text-2xl font-bold text-gray-900">{dbStats.totalStudents}</p>
               </div>
             </div>
           </div>
@@ -709,7 +747,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Exams</p>
-                <p className="text-2xl font-bold text-gray-900">{totalExamsTaken}</p>
+                <p className="text-2xl font-bold text-gray-900">{dbStats.totalExams}</p>
               </div>
             </div>
           </div>
@@ -721,7 +759,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Avg Score</p>
-                <p className="text-2xl font-bold text-gray-900">{Math.round(averageScore)}%</p>
+                <p className="text-2xl font-bold text-gray-900">{dbStats.averageScore}%</p>
               </div>
             </div>
           </div>
@@ -1521,7 +1559,7 @@ const AdminPage: React.FC<AdminPageProps> = ({ onLogout }) => {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-emerald-700">Total Students:</span>
-                    <span className="font-medium">{totalStudents}</span>
+                    <span className="font-medium">{dbStats.totalStudents}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-emerald-700">Uptime:</span>

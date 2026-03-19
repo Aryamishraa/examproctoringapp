@@ -87,83 +87,10 @@ class StudentMonitoringService {
 
   constructor() {
     this.startMonitoring();
-    // Seed demo students when running on localhost for development/demo purposes
-    try {
-      const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-      if ((hostname === 'localhost' || hostname === '127.0.0.1') && this.students.size === 0) {
-        this.seedDemoStudents();
-      }
-    } catch {
-      // ignore in non-browser environments
-    }
+    // Demo seeding removed - now using database data
   }
 
-  private seedDemoStudents() {
-    // Create three demo students with varying states
-    const id1 = this.addStudent('ENR001', 'Aarav Sharma', 'demo');
-    const id2 = this.addStudent('ENR002', 'Priya Kapoor', 'demo');
-    const id3 = this.addStudent('ENR003', 'Rohit Patel', 'demo');
 
-    // Update statuses to show different dashboard panels
-    this.updateStudentStatus(id1, {
-      isCameraOn: true,
-      isMicOn: true,
-      isInExam: true,
-      examStartTime: new Date(Date.now() - 5 * 60 * 1000), // started 5 minutes ago
-      currentExam: {
-        examId: 'demo_exam_1',
-        examDate: new Date(),
-        examDuration: 0,
-        totalQuestions: 20,
-        questionsAttempted: 3,
-        questionsAnswered: 3,
-        questionsSkipped: 0,
-        score: null,
-        status: 'in_progress',
-        categories: []
-      },
-      connectionQuality: 'good'
-    });
-
-    this.updateStudentStatus(id2, {
-      isCameraOn: false,
-      isMicOn: true,
-      isInExam: false,
-      connectionQuality: 'excellent'
-    });
-
-    this.updateStudentStatus(id3, {
-      isCameraOn: true,
-      isMicOn: false,
-      isInExam: false,
-      connectionQuality: 'poor'
-    });
-
-    // Add initial activities to match screenshots
-    this.recordActivity(id1, 'tab_switch', 'Student switched to another tab', 'medium');
-    this.recordActivity(id3, 'speaking', 'Student started speaking', 'low');
-
-    // Priya Kapoor (id2) has multiple warnings and a disconnection in the screenshot
-    this.recordActivity(id2, 'warning_received', 'Warning sent by admin (2/3)', 'medium');
-    this.recordActivity(id2, 'warning_received', 'Warning sent by admin (3/3)', 'high');
-    this.recordActivity(id2, 'disconnected', 'Student disconnected due to 3 warnings', 'high');
-
-    // Update Priya's status to disconnected/offline
-    this.updateStudentStatus(id2, {
-      isOnline: false,
-      connectionQuality: 'disconnected',
-      warnings: 4
-    });
-
-    // Update others' warning counts to match screenshots
-    const aarav = this.students.get(id1);
-    if (aarav) aarav.warnings = 1;
-
-    const rohit = this.students.get(id3);
-    if (rohit) rohit.warnings = 2;
-
-    this.notifyStatusUpdate();
-  }
 
   public startMonitoring() {
     // Monitor tab visibility changes
@@ -527,6 +454,44 @@ class StudentMonitoringService {
     );
   }
 
+  /**
+   * Synchronize the monitoring service with the database student list.
+   * This adds offline students from the database to the monitoring map.
+   */
+  public syncWithDatabase(dbStudents: any[]) {
+    dbStudents.forEach(dbStudent => {
+      if (!this.students.has(dbStudent.id)) {
+        const student: StudentStatus = {
+          id: dbStudent.id,
+          name: dbStudent.name,
+          enrollmentNo: dbStudent.enrollmentNo,
+          isOnline: false,
+          isCameraOn: false,
+          isMicOn: false,
+          isSpeaking: false,
+          isTabActive: false,
+          lastActivity: new Date(),
+          examStartTime: null,
+          warnings: 0,
+          currentTab: 'Offline',
+          connectionQuality: 'disconnected',
+          loginTime: new Date(),
+          isInExam: false,
+          examHistory: [],
+          currentExam: null,
+          totalExamsTaken: 0,
+          averageScore: 0,
+          lastExamDate: null,
+          lastExamScore: null,
+          totalTimeSpent: 0,
+          activityCount: 0
+        };
+        this.students.set(dbStudent.id.toString(), student);
+      }
+    });
+    this.notifyStatusUpdate();
+  }
+
   public async startAudioMonitoring(studentId: string): Promise<boolean> {
     try {
       this.audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -598,12 +563,12 @@ class StudentMonitoringService {
     this.stopMonitoring();
     this.stopAudioMonitoring();
     this.stopAutoSnapshots();
-    
+
     // Clear student statuses for a clean state on next login
     this.students.clear();
     this.snapshots.clear();
     this.recentActivities = [];
-    
+
     console.log('StudentMonitoringService: All proctoring and media tracks stopped.');
   }
 
